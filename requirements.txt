@@ -1,0 +1,14 @@
+# GRK PowerSloth - Python Version
+# Dependencias del proyecto
+
+# UI Framework
+PyQt6>=6.6.0
+
+# Monitoreo de procesos
+psutil>=5.9.0
+
+# Notificaciones de Windows
+win10toast>=0.9
+
+# Acceso a Windows API
+pywin32>=306

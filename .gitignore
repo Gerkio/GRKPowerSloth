@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales
+venv/
+env/
+.env
+
+# PyInstaller (Carpetas de compilación)
+build/
+dist/
+*.spec
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs y temporales
+*.log
