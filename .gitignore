@@ -1,3 +1,8 @@
+# Documentación interna (No subir al repo)
+GUIA_*.md
+PLAN_*.md
+MEJORAS_*.md
+
 # Python
 __pycache__/
 *.py[cod]

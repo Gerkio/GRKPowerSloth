@@ -20,6 +20,8 @@ from services.system_integration import SystemIntegration
 from managers.localization_manager import LocalizationManager
 from managers.theme_manager import ThemeManager
 from managers.notification_manager import NotificationManager
+from managers.update_manager import UpdateManager
+from ui.update_dialog import UpdateDialog
 
 
 class MainPresenter(QObject):
@@ -61,6 +63,12 @@ class MainPresenter(QObject):
         self.remaining_seconds = 0
         self.is_running = False
         
+        # OTA Updates
+        self.update_manager = UpdateManager()
+        self.update_manager.update_available.connect(self._on_update_available)
+        self.update_manager.check_failed.connect(self._on_update_check_failed)
+        UpdateManager.cleanup_old_updates()
+        
         # Conectar eventos de la vista
         self._connect_view_signals()
         
@@ -100,6 +108,9 @@ class MainPresenter(QObject):
         self.view.tray_icon_double_clicked.connect(self._on_tray_restore)
         self.view.show_from_tray_clicked.connect(self._on_tray_restore)
         self.view.exit_from_tray_clicked.connect(lambda: QApplication.quit())
+        
+        # Updates
+        self.view.check_updates_clicked.connect(self._on_check_updates_clicked)
     
     # ===== HANDLERS DEL CICLO DE VIDA =====
     
@@ -514,3 +525,19 @@ class MainPresenter(QObject):
             self.settings.last_monitored_process_name = selected_process['name']
         
         SettingsManager.save(self.settings)
+
+    # ===== OTA UPDATES =====
+
+    def _on_check_updates_clicked(self):
+        """Usuario solicita buscar actualizaciones"""
+        self.update_manager.check_for_updates(manual_check=True)
+
+    def _on_update_available(self, version, url, changelog):
+        """Se encontró una actualización"""
+        dialog = UpdateDialog(self.view, version, changelog, url, self.update_manager)
+        dialog.exec()
+
+    def _on_update_check_failed(self, error_msg):
+        """No hay actualizaciones o error"""
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(self.view, "Buscar Actualizaciones", error_msg)

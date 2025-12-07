@@ -64,6 +64,10 @@ class MainWindow(QMainWindow):
     # System tray
     tray_icon_double_clicked = pyqtSignal()
     show_from_tray_clicked = pyqtSignal()
+    
+    # Updates
+    check_updates_clicked = pyqtSignal()
+    show_from_tray_clicked = pyqtSignal()
     exit_from_tray_clicked = pyqtSignal()
     
     def __init__(self):
@@ -429,7 +433,12 @@ class MainWindow(QMainWindow):
         
         # ========== MENÚ HELP ==========
         menu_help = menubar.addMenu(LocalizationManager.get("menu_help"))
+        
+        self.action_check_updates = QAction("Buscar Actualizaciones...", self)
         self.action_about = QAction(LocalizationManager.get("menu_about"), self)
+        
+        menu_help.addAction(self.action_check_updates)
+        menu_help.addSeparator()
         menu_help.addAction(self.action_about)
     
     def _setup_tray_icon(self):
@@ -512,7 +521,8 @@ class MainWindow(QMainWindow):
         self.action_lang_portuguese.triggered.connect(lambda: self._on_language_selected(Language.PORTUGUESE))
         self.action_lang_french.triggered.connect(lambda: self._on_language_selected(Language.FRENCH))
         
-        # About
+        # About & Updates
+        self.action_check_updates.triggered.connect(self.check_updates_clicked.emit)
         self.action_about.triggered.connect(self._show_about_dialog)
     
     # ===== HANDLERS INTERNOS =====
