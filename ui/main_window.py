@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QMenuBar, QMenu, QSystemTrayIcon, QMessageBox, QButtonGroup,
     QStyle
 )
-from PyQt6.QtCore import pyqtSignal, Qt, QTime
+from PyQt6.QtCore import pyqtSignal, Qt, QTime, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QIcon, QAction, QFont, QActionGroup
 
 from models.enums import ScheduleMode, PowerAction, Theme, Language
@@ -53,6 +53,7 @@ class MainWindow(QMainWindow):
     prevent_sleep_changed = pyqtSignal(bool)
     start_with_windows_changed = pyqtSignal(bool)
     always_on_top_changed = pyqtSignal(bool)
+    watchdog_enabled_changed = pyqtSignal(bool)  # Watchdog toggle
     theme_changed = pyqtSignal(object)        # Theme
     language_changed = pyqtSignal(object)     # Language
     specific_time_changed = pyqtSignal(object) # QTime
@@ -69,6 +70,11 @@ class MainWindow(QMainWindow):
     check_updates_clicked = pyqtSignal()
     show_from_tray_clicked = pyqtSignal()
     exit_from_tray_clicked = pyqtSignal()
+    
+    # Nuevas funcionalidades
+    schedule_clicked = pyqtSignal()           # Calendario de eventos
+    history_clicked = pyqtSignal()            # Ver historial
+    compact_mode_changed = pyqtSignal(bool)   # Modo compacto
     
     def __init__(self):
         super().__init__()
@@ -148,7 +154,7 @@ class MainWindow(QMainWindow):
         spinbox_width = DisplayHelper.scale_value(80)
         
         self.spin_hours = ValidatedSpinBox()
-        self.spin_hours.setRange(0, 99)
+        self.spin_hours.setRange(0, 23)  # Límite lógico de horas
         self.spin_hours.setValue(0)
         self.spin_hours.setMinimumWidth(spinbox_width)
         
@@ -357,6 +363,18 @@ class MainWindow(QMainWindow):
         menu_file.addAction(self.action_start)
         menu_file.addAction(self.action_stop)
         menu_file.addSeparator()
+        
+        # Nuevas opciones
+        self.action_schedule = QAction("🗓️ Calendario de Eventos...", self)
+        self.action_history = QAction("📋 Ver Historial...", self)
+        self.action_compact_mode = QAction("🔲 Modo Compacto", self)
+        self.action_compact_mode.setCheckable(True)
+        
+        menu_file.addAction(self.action_schedule)
+        menu_file.addAction(self.action_history)
+        menu_file.addSeparator()
+        menu_file.addAction(self.action_compact_mode)
+        menu_file.addSeparator()
         menu_file.addAction(self.action_exit)
         
         # ========== MENÚ SETTINGS ==========
@@ -368,8 +386,13 @@ class MainWindow(QMainWindow):
         self.action_always_on_top = QAction(LocalizationManager.get("menu_always_on_top"), self)
         self.action_always_on_top.setCheckable(True)
         
+        self.action_enable_watchdog = QAction(LocalizationManager.get("menu_watchdog"), self)
+        self.action_enable_watchdog.setCheckable(True)
+        self.action_enable_watchdog.setToolTip(LocalizationManager.get("tooltip_watchdog"))
+        
         menu_settings.addAction(self.action_start_with_windows)
         menu_settings.addAction(self.action_always_on_top)
+        menu_settings.addAction(self.action_enable_watchdog)
         menu_settings.addSeparator()
         
         # Submenú Theme
@@ -398,11 +421,16 @@ class MainWindow(QMainWindow):
         self.action_theme_blood.setCheckable(True)
         theme_group.addAction(self.action_theme_blood)
         
+        self.action_theme_high_contrast = QAction("♿ Alto Contraste", self)
+        self.action_theme_high_contrast.setCheckable(True)
+        theme_group.addAction(self.action_theme_high_contrast)
+        
         menu_theme.addAction(self.action_theme_light)
         menu_theme.addAction(self.action_theme_dark)
         menu_theme.addAction(self.action_theme_nordic)
         menu_theme.addAction(self.action_theme_dracula)
         menu_theme.addAction(self.action_theme_blood)
+        menu_theme.addAction(self.action_theme_high_contrast)
         
         # Submenú Language
         menu_language = menu_settings.addMenu(LocalizationManager.get("menu_language"))
@@ -509,12 +537,19 @@ class MainWindow(QMainWindow):
         # Menú Settings
         self.action_start_with_windows.toggled.connect(self.start_with_windows_changed.emit)
         self.action_always_on_top.toggled.connect(self._on_always_on_top_toggled)
+        self.action_enable_watchdog.toggled.connect(self.watchdog_enabled_changed.emit)
         
         self.action_theme_light.triggered.connect(lambda: self._on_theme_selected(Theme.LIGHT))
         self.action_theme_dark.triggered.connect(lambda: self._on_theme_selected(Theme.DARK))
         self.action_theme_nordic.triggered.connect(lambda: self._on_theme_selected(Theme.NORDIC))
         self.action_theme_dracula.triggered.connect(lambda: self._on_theme_selected(Theme.DRACULA))
         self.action_theme_blood.triggered.connect(lambda: self._on_theme_selected(Theme.BLOOD))
+        self.action_theme_high_contrast.triggered.connect(lambda: self._on_theme_selected(Theme.HIGH_CONTRAST))
+        
+        # Menú File (Nuevas opciones)
+        self.action_schedule.triggered.connect(self.schedule_clicked.emit)
+        self.action_history.triggered.connect(self.history_clicked.emit)
+        self.action_compact_mode.toggled.connect(self.compact_mode_changed.emit)
         
         self.action_lang_english.triggered.connect(lambda: self._on_language_selected(Language.ENGLISH))
         self.action_lang_spanish.triggered.connect(lambda: self._on_language_selected(Language.SPANISH))
@@ -619,6 +654,16 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         if not self._loaded:
             self._loaded = True
+            
+            # Animación de entrada suave (Premium Feel)
+            self.setWindowOpacity(0.0)
+            self._fade_anim = QPropertyAnimation(self, b"windowOpacity")
+            self._fade_anim.setDuration(450)
+            self._fade_anim.setStartValue(0.0)
+            self._fade_anim.setEndValue(1.0)
+            self._fade_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            self._fade_anim.start()
+            
             self.form_loaded.emit()
     
     def closeEvent(self, event):
@@ -851,7 +896,10 @@ class MainWindow(QMainWindow):
         self.action_exit.setText(LocalizationManager.get("menu_exit"))
         self.action_start_with_windows.setText(LocalizationManager.get("menu_start_with_windows"))
         self.action_always_on_top.setText(LocalizationManager.get("menu_always_on_top"))
+        self.action_enable_watchdog.setText(LocalizationManager.get("menu_watchdog"))
+        self.action_enable_watchdog.setToolTip(LocalizationManager.get("tooltip_watchdog"))
         self.action_theme_light.setText(LocalizationManager.get("menu_light"))
+
         self.action_theme_dark.setText(LocalizationManager.get("menu_dark"))
         self.action_lang_english.setText(LocalizationManager.get("menu_english"))
         self.action_lang_spanish.setText(LocalizationManager.get("menu_spanish"))
@@ -875,6 +923,20 @@ class MainWindow(QMainWindow):
         """Oculta la ventana"""
         self.hide()
     
+    def show_notification(self, title: str, message: str, duration_sec: int = 5):
+        """Muestra una notificación nativa usando el Tray Icon (PyQt6 Native)"""
+        if hasattr(self, 'tray_icon') and self.tray_icon.isVisible():
+            self.tray_icon.showMessage(
+                title, 
+                message, 
+                QSystemTrayIcon.MessageIcon.Information, 
+                duration_sec * 1000
+            )
+        else:
+            # Si no hay tray visible, no podemos mostrar notificación nativa fácilmente sin bloquear.
+            # Alternativa: QToolTip o status bar. Por ahora solo Status.
+            self.update_status(message)
+    
     def show_tray_icon(self):
         """Muestra el icono de bandeja"""
         self.tray_icon.setVisible(True)
@@ -887,3 +949,59 @@ class MainWindow(QMainWindow):
         """Trae la ventana al frente"""
         self.activateWindow()
         self.setWindowState(Qt.WindowState.WindowActive)
+
+    # ===== MODO COMPACTO Y ANIMACIONES =====
+    
+    def set_compact_mode(self, enabled: bool):
+        """Activa o desactiva el modo compacto (minimalista)"""
+        # Actualizar check del menú
+        self.action_compact_mode.setChecked(enabled)
+        
+        # Animar transición (Fade Out -> Cambios -> Fade In)
+        self._animate_transition(lambda: self._apply_compact_mode(enabled))
+    
+    def _apply_compact_mode(self, enabled: bool):
+        """Aplica los cambios de visibilidad para el modo compacto"""
+        # Elementos a ocultar/mostrar
+        elements_to_toggle = [
+            self.group_trigger,
+            self.chk_force_close,
+            self.chk_prevent_sleep
+        ]
+        
+        for widget in elements_to_toggle:
+            widget.setVisible(not enabled)
+            
+        # Si estamos en modo compacto, el GroupBox de acción puede simplificarse
+        if enabled:
+            # En modo compacto, solo mostramos el timer/progreso y botones start/stop
+            self.resize(300, 200)  # Tamaño mínimo
+        else:
+            self.resize(400, 550)  # Tamaño normal (aprox)
+            
+        # Forzar reajuste de layout
+        self.adjustSize()
+    
+    def _animate_transition(self, change_callback):
+        """Ejecuta una animación de fade-out, llama al callback, y fade-in"""
+        # Fade Out
+        self._fade_anim = QPropertyAnimation(self, b"windowOpacity")
+        self._fade_anim.setDuration(200)
+        self._fade_anim.setStartValue(1.0)
+        self._fade_anim.setEndValue(0.0)
+        self._fade_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        
+        def on_fade_out_finished():
+            change_callback()
+            # Fade In
+            self._fade_anim.setDirection(QPropertyAnimation.Direction.Backward)
+            self._fade_anim.start()
+            
+            # Desconectar para que no se repita
+            try:
+                self._fade_anim.finished.disconnect(on_fade_out_finished)
+            except:
+                pass
+        
+        self._fade_anim.finished.connect(on_fade_out_finished)
+        self._fade_anim.start()

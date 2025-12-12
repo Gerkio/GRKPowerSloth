@@ -57,13 +57,13 @@ class ThemeManager:
     # ===== TEMA OSCURO - Diseño Premium =====
     DARK_THEME = ColorPalette(
         # Fondos - Escala de grises profundos
-        background='#1a1a1a',
-        surface='#2d2d2d',
-        surface_hover='#3a3a3a',
+        background='#121212',  # Más profundo (Material Dark)
+        surface='#1e1e1e',     # Elevación 1
+        surface_hover='#2d2d2d',
         # Textos - Alto contraste
         text_primary='#ffffff',
-        text_secondary='#b0b0b0',
-        text_disabled='#666666',
+        text_secondary='#e0e0e0',  # Más brillante para legibilidad
+        text_disabled='#757575',
         # Azul vibrante como acento
         accent_primary='#0078D4',
         accent_hover='#1a8cff',
@@ -80,13 +80,13 @@ class ThemeManager:
     # ===== TEMA CLARO - Limpio y Moderno =====
     LIGHT_THEME = ColorPalette(
         # Fondos - Blancos suaves
-        background='#f5f5f5',
-        surface='#ffffff',
-        surface_hover='#e8e8e8',
+        background='#fafafa',  # Casi blanco
+        surface='#ffffff',     # Blanco puro
+        surface_hover='#f0f0f0',
         # Textos
-        text_primary='#1a1a1a',
-        text_secondary='#666666',
-        text_disabled='#999999',
+        text_primary='#000000',  # Negro puro para máximo contraste
+        text_secondary='#424242', # Gris muy oscuro
+        text_disabled='#9e9e9e',
         # Azul como acento
         accent_primary='#0078D4',
         accent_hover='#1a8cff',
@@ -154,6 +154,30 @@ class ThemeManager:
         border_focus='#DC143C'
     )
     
+    # ===== TEMA HIGH CONTRAST - Accesible =====
+    # Diseñado para máxima legibilidad y compatibilidad con lectores de pantalla
+    HIGH_CONTRAST_THEME = ColorPalette(
+        # Fondos - Negro puro para máximo contraste
+        background='#000000',
+        surface='#000000',
+        surface_hover='#1A1A1A',
+        # Textos - Blanco puro y amarillo brillante
+        text_primary='#FFFFFF',
+        text_secondary='#FFFF00',  # Amarillo para información secundaria
+        text_disabled='#808080',
+        # Colores de alto contraste
+        accent_primary='#00FFFF',   # Cyan brillante
+        accent_hover='#FFFFFF',
+        accent_pressed='#00CCCC',
+        # Estados con colores muy distinguibles
+        success='#00FF00',          # Verde brillante
+        warning='#FFFF00',          # Amarillo brillante
+        danger='#FF0000',           # Rojo brillante
+        # Bordes visibles
+        border='#FFFFFF',
+        border_focus='#00FFFF'
+    )
+    
     @classmethod
     def get_palette(cls, theme: Theme) -> ColorPalette:
         """Obtiene la paleta de colores para un tema."""
@@ -165,6 +189,8 @@ class ThemeManager:
             return cls.DRACULA_THEME
         elif theme == Theme.BLOOD:
             return cls.BLOOD_THEME
+        elif theme == Theme.HIGH_CONTRAST:
+            return cls.HIGH_CONTRAST_THEME
         else:
             return cls.DARK_THEME
     

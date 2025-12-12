@@ -40,7 +40,9 @@ class AppSettings:
     prevent_sleep: bool = True
     start_with_windows: bool = False
     always_on_top: bool = False
+    compact_mode: bool = False  # Vista minimalista
     monitor_by_exit: bool = True
+    watchdog_enabled: bool = False  # Watchdog (auto-restart if killed)
     
     # Último proceso monitoreado
     last_monitored_process_name: Optional[str] = None

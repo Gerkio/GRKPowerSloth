@@ -19,9 +19,12 @@ from services.settings_manager import SettingsManager, AppSettings
 from services.system_integration import SystemIntegration
 from managers.localization_manager import LocalizationManager
 from managers.theme_manager import ThemeManager
-from managers.notification_manager import NotificationManager
+# from managers.notification_manager import NotificationManager (Removed native lib dependency)
 from managers.update_manager import UpdateManager
+from services.schedule_manager import ScheduleManager
 from ui.update_dialog import UpdateDialog
+from ui.history_dialog import HistoryDialog
+from ui.schedule_dialog import ScheduleDialog
 
 
 class MainPresenter(QObject):
@@ -69,6 +72,11 @@ class MainPresenter(QObject):
         self.update_manager.check_failed.connect(self._on_update_check_failed)
         UpdateManager.cleanup_old_updates()
         
+        # Schedule Manager & History
+        self.schedule_manager = ScheduleManager()
+        self.schedule_manager.event_triggered.connect(self._on_scheduled_event_triggered)
+        self.schedule_manager.start_monitoring()
+        
         # Conectar eventos de la vista
         self._connect_view_signals()
         
@@ -76,6 +84,11 @@ class MainPresenter(QObject):
         self.process_monitor.monitoring_success.connect(self._on_monitoring_success)
         self.process_monitor.monitoring_log.connect(lambda msg: print(msg))
         self.process_monitor.monitoring_error.connect(lambda err: print(f"ERROR: {err}"))
+        
+        # Log app start
+        self.schedule_manager.log_action(
+            -1, "system", "Aplicación iniciada", completed=True
+        )
     
     def _connect_view_signals(self):
         """Conecta todos los signals de la vista a los handlers del presentador"""
@@ -104,6 +117,9 @@ class MainPresenter(QObject):
         self.view.refresh_processes_clicked.connect(self._populate_process_list)
         self.view.monitor_mode_changed.connect(lambda _: self._update_and_save_settings())
         
+        # Watchdog toggle
+        self.view.watchdog_enabled_changed.connect(self._on_watchdog_enabled_changed)
+        
         # System tray
         self.view.tray_icon_double_clicked.connect(self._on_tray_restore)
         self.view.show_from_tray_clicked.connect(self._on_tray_restore)
@@ -111,6 +127,11 @@ class MainPresenter(QObject):
         
         # Updates
         self.view.check_updates_clicked.connect(self._on_check_updates_clicked)
+        
+        # New features
+        self.view.schedule_clicked.connect(self._on_schedule_clicked)
+        self.view.history_clicked.connect(self._on_history_clicked)
+        self.view.compact_mode_changed.connect(self._on_compact_mode_changed)
     
     # ===== HANDLERS DEL CICLO DE VIDA =====
     
@@ -134,6 +155,11 @@ class MainPresenter(QObject):
         self.view.set_always_on_top(self.settings.always_on_top)
         self.view.set_mode(ScheduleMode(self.settings.last_mode))
         self.view.set_monitor_by_exit(self.settings.monitor_by_exit)
+        self.view.action_enable_watchdog.setChecked(self.settings.watchdog_enabled)
+        
+        # Restaurar modo compacto (después de update_ui_state para correcta visualización)
+        if self.settings.compact_mode:
+            self.view.set_compact_mode(True)
         
         # Si está en modo monitor, cargar lista de procesos
         if ScheduleMode(self.settings.last_mode) == ScheduleMode.MONITOR_ACTIVITY:
@@ -144,6 +170,11 @@ class MainPresenter(QObject):
     
     def _on_form_closing(self):
         """Handler cuando se cierra el formulario"""
+        # Log app close
+        self.schedule_manager.log_action(
+            -1, "system", "Aplicación cerrada", completed=True
+        )
+        
         if not self.is_running:
             self._update_and_save_settings()
         
@@ -156,7 +187,7 @@ class MainPresenter(QObject):
         if state == Qt.WindowState.WindowMinimized:
             self.view.hide_window()
             self.view.show_tray_icon()
-            NotificationManager.show_notification(
+            self.view.show_notification(
                 "GRK PowerSloth",
                 LocalizationManager.get("status_minimized")
             )
@@ -211,7 +242,7 @@ class MainPresenter(QObject):
         self._update_ui_state(True)
         self._activate_keep_awake()
         
-        NotificationManager.show_notification(
+        self.view.show_notification(
             LocalizationManager.get("notification_timer_started"),
             LocalizationManager.get("notification_timer_started_body")
         )
@@ -238,7 +269,7 @@ class MainPresenter(QObject):
             )
             self.view.update_status(status_text)
             
-            NotificationManager.show_notification(
+            self.view.show_notification(
                 LocalizationManager.get("notification_timer_started"),
                 status_text
             )
@@ -274,7 +305,7 @@ class MainPresenter(QObject):
         if self.remaining_seconds > 0:
             # Notificación cuando queda 1 minuto
             if self.remaining_seconds == 60:
-                NotificationManager.show_notification(
+                self.view.show_notification(
                     LocalizationManager.get("notification_minute_warning"),
                     LocalizationManager.get("notification_minute_warning_body")
                 )
@@ -519,6 +550,7 @@ class MainPresenter(QObject):
         self.settings.prevent_sleep = self.view.get_is_prevent_sleep_enabled()
         self.settings.last_mode = self.view.get_selected_mode().value
         self.settings.monitor_by_exit = self.view.get_is_monitor_by_exit()
+        self.settings.compact_mode = self.view.action_compact_mode.isChecked()
         
         selected_process = self.view.get_selected_process()
         if selected_process:
@@ -541,3 +573,65 @@ class MainPresenter(QObject):
         """No hay actualizaciones o error"""
         from PyQt6.QtWidgets import QMessageBox
         QMessageBox.information(self.view, "Buscar Actualizaciones", error_msg)
+
+    # ===== WATCHDOG =====
+
+    def _on_watchdog_enabled_changed(self, enabled: bool):
+        """Handler cuando se habilita/deshabilita el watchdog"""
+        self.settings.watchdog_enabled = enabled
+        SettingsManager.save(self.settings)
+        
+        # from managers.notification_manager import NotificationManager
+        if enabled:
+            self.view.show_notification(
+                "Watchdog Habilitado",
+                "La aplicación se reiniciará automáticamente si es cerrada inesperadamente."
+            )
+    # ===== NUEVAS FUNCIONALIDADES =====
+    
+    def _on_schedule_clicked(self):
+        """Muestra el calendario de eventos"""
+        dialog = ScheduleDialog(self.view, self.schedule_manager.get_events(), self.schedule_manager._save_events)
+        # Necesitamos un wrapper para guardar porque ScheduleDialog espera un callback
+        # que reciba la lista, pero ScheduleManager maneja su propia lista interna
+        
+        def save_callback(events):
+            # Limpiar y repoblar
+            self.schedule_manager._events = events
+            self.schedule_manager._save_events()
+            
+        dialog = ScheduleDialog(self.view, self.schedule_manager.get_events(), save_callback)
+        dialog.exec()
+    
+    def _on_history_clicked(self):
+        """Muestra el historial"""
+        dialog = HistoryDialog(self.view, self.schedule_manager.get_history(200), self.schedule_manager.clear_history)
+        dialog.exec()
+    
+    def _on_compact_mode_changed(self, enabled: bool):
+        """Handler cambio modo compacto"""
+        self.view.set_compact_mode(enabled)
+        self.settings.compact_mode = enabled
+        SettingsManager.save(self.settings)
+    
+    def _on_scheduled_event_triggered(self, event):
+        """Handler cuando se dispara un evento programado"""
+        action_name = event.get_action_name()
+        
+        # Log y notificación
+        msg = f"Ejecutando evento programado: {event.name} ({action_name})"
+        self.view.show_notification("Evento Programado", msg)
+        
+        self.schedule_manager.log_action(
+            event.action_type, 
+            "scheduled", 
+            f"Evento: {event.name}", 
+            scheduled_event_id=event.id
+        )
+        
+        # Configurar acción en UI para ejecución consistente
+        self.view.set_action(PowerAction(event.action_type))
+        self.view.set_force_close(event.force_close)
+        
+        # Ejecutar acción
+        self._execute_final_action()

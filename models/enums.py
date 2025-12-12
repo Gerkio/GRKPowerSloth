@@ -13,6 +13,7 @@ class Theme(Enum):
     NORDIC = 2
     DRACULA = 3
     BLOOD = 4
+    HIGH_CONTRAST = 5  # Modo accesible
 
 
 class Language(Enum):

@@ -1,0 +1,8 @@
+PyQt6>=6.6.0
+psutil>=5.9.0
+pywin32>=306
+# win10toast>=0.9 (Removed: using native Qt TrayIcon notifications)
+requests>=2.31.0
+packaging>=23.0
+# Opcionales (descomenta si los usas)
+# pyinstaller>=6.0
