@@ -6,12 +6,14 @@ Esta es la vista principal del patrón MVP.
 Contiene todos los controles de UI y expone eventos (signals) al Presenter.
 """
 
+import os
+import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QRadioButton, QCheckBox, QGroupBox,
     QComboBox, QSpinBox, QTimeEdit, QProgressBar, QLineEdit,
     QMenuBar, QMenu, QSystemTrayIcon, QMessageBox, QButtonGroup,
-    QStyle
+    QStyle, QApplication
 )
 from PyQt6.QtCore import pyqtSignal, Qt, QTime, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QIcon, QAction, QFont, QActionGroup
@@ -75,6 +77,18 @@ class MainWindow(QMainWindow):
     schedule_clicked = pyqtSignal()           # Calendario de eventos
     history_clicked = pyqtSignal()            # Ver historial
     compact_mode_changed = pyqtSignal(bool)   # Modo compacto
+    
+    @staticmethod
+    def get_resource_path(relative_path: str) -> str:
+        """Obtiene la ruta absoluta al recurso, funciona para dev y PyInstaller."""
+        try:
+            # PyInstaller crea una carpeta temporal y guarda la ruta en _MEIPASS
+            base_path = sys._MEIPASS
+        except Exception:
+            # En desarrollo, el icono está en la raíz (un nivel arriba de /ui)
+            base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+        return os.path.join(base_path, relative_path)
     
     def __init__(self):
         super().__init__()
@@ -365,9 +379,9 @@ class MainWindow(QMainWindow):
         menu_file.addSeparator()
         
         # Nuevas opciones
-        self.action_schedule = QAction("🗓️ Calendario de Eventos...", self)
-        self.action_history = QAction("📋 Ver Historial...", self)
-        self.action_compact_mode = QAction("🔲 Modo Compacto", self)
+        self.action_schedule = QAction(LocalizationManager.get("menu_schedule"), self)
+        self.action_history = QAction(LocalizationManager.get("menu_history"), self)
+        self.action_compact_mode = QAction(LocalizationManager.get("menu_compact"), self)
         self.action_compact_mode.setCheckable(True)
         
         menu_file.addAction(self.action_schedule)
@@ -421,7 +435,7 @@ class MainWindow(QMainWindow):
         self.action_theme_blood.setCheckable(True)
         theme_group.addAction(self.action_theme_blood)
         
-        self.action_theme_high_contrast = QAction("♿ Alto Contraste", self)
+        self.action_theme_high_contrast = QAction(LocalizationManager.get("menu_high_contrast"), self)
         self.action_theme_high_contrast.setCheckable(True)
         theme_group.addAction(self.action_theme_high_contrast)
         
@@ -471,14 +485,11 @@ class MainWindow(QMainWindow):
     
     def _setup_tray_icon(self):
         """Configura el icono de la bandeja del sistema"""
-        from pathlib import Path
-        
         self.tray_icon = QSystemTrayIcon(self)
         
-        # Cargar el icono de la aplicación
-        icon_path = Path(__file__).parent.parent / "app_icon.ico"
-        if icon_path.exists():
-            self.tray_icon.setIcon(QIcon(str(icon_path)))
+        # El icono se establece en _set_window_icon o mediante reapply_icon
+        if hasattr(self, 'app_icon'):
+            self.tray_icon.setIcon(self.app_icon)
         
         # Menú contextual del tray
         tray_menu = QMenu()
@@ -626,20 +637,18 @@ class MainWindow(QMainWindow):
     
     def _set_window_icon(self):
         """Establece el icono de la ventana y lo guarda para uso global"""
-        from pathlib import Path
+        icon_path = self.get_resource_path("app_icon.ico")
         
-        # Ruta al icono (en la carpeta raíz del proyecto Python)
-        icon_path = Path(__file__).parent.parent / "app_icon.ico"
-        
-        if icon_path.exists():
-            self.app_icon = QIcon(str(icon_path))
+        if os.path.exists(icon_path):
+            self.app_icon = QIcon(icon_path)
             self.setWindowIcon(self.app_icon)
-            # También establecer en el tray icon
+            # También establecer en el tray icon si ya existe
             if hasattr(self, 'tray_icon'):
                 self.tray_icon.setIcon(self.app_icon)
         else:
-            # Fallback: icono vacío
-            self.app_icon = QIcon()
+            # Fallback a icono de sistema o vacío
+            self.app_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+            self.setWindowIcon(self.app_icon)
     
     def get_app_icon(self) -> QIcon:
         """Retorna el icono de la aplicación para uso externo (ej: AboutDialog)"""
@@ -866,13 +875,6 @@ class MainWindow(QMainWindow):
         """Aplica un tema a la ventana con escalado responsivo"""
         scale = getattr(self, '_scale_factor', 1.0)
         ThemeManager.apply_theme(self, palette, scale)
-        
-        # Actualizar tema en los ValidatedSpinBox
-        # Consideramos oscuro cualquier tema que no sea el Light
-        is_dark = palette.background != '#f5f5f5' 
-        for spinbox in [self.spin_hours, self.spin_minutes, self.spin_seconds]:
-            if hasattr(spinbox, 'set_theme'):
-                spinbox.set_theme(is_dark)
     
     def reapply_localization(self):
         """Reaplicar traducciones a todos los controles"""
@@ -901,6 +903,12 @@ class MainWindow(QMainWindow):
         self.action_theme_light.setText(LocalizationManager.get("menu_light"))
 
         self.action_theme_dark.setText(LocalizationManager.get("menu_dark"))
+        self.action_theme_high_contrast.setText(LocalizationManager.get("menu_high_contrast"))
+        
+        self.action_schedule.setText(LocalizationManager.get("menu_schedule"))
+        self.action_history.setText(LocalizationManager.get("menu_history"))
+        self.action_compact_mode.setText(LocalizationManager.get("menu_compact"))
+        
         self.action_lang_english.setText(LocalizationManager.get("menu_english"))
         self.action_lang_spanish.setText(LocalizationManager.get("menu_spanish"))
         self.action_about.setText(LocalizationManager.get("menu_about"))
@@ -975,9 +983,16 @@ class MainWindow(QMainWindow):
         # Si estamos en modo compacto, el GroupBox de acción puede simplificarse
         if enabled:
             # En modo compacto, solo mostramos el timer/progreso y botones start/stop
-            self.resize(300, 200)  # Tamaño mínimo
+            self.setFixedWidth(DisplayHelper.scale_value(320))
+            self.setFixedHeight(DisplayHelper.scale_value(220))
         else:
-            self.resize(400, 550)  # Tamaño normal (aprox)
+            self.setFixedWidth(DisplayHelper.scale_value(480))
+            self.setMinimumHeight(DisplayHelper.scale_value(550))
+            self.setMaximumHeight(2000) # Permitir que crezca if needed
+            self.adjustSize()
+        
+        # Centrar ventana si el modo cambia (opcional, pero ayuda)
+        # self.move(QApplication.primaryScreen().geometry().center() - self.rect().center())
             
         # Forzar reajuste de layout
         self.adjustSize()

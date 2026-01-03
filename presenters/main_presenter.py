@@ -584,8 +584,8 @@ class MainPresenter(QObject):
         # from managers.notification_manager import NotificationManager
         if enabled:
             self.view.show_notification(
-                "Watchdog Habilitado",
-                "La aplicación se reiniciará automáticamente si es cerrada inesperadamente."
+                LocalizationManager.get("notification_watchdog_enabled"),
+                LocalizationManager.get("notification_watchdog_body")
             )
     # ===== NUEVAS FUNCIONALIDADES =====
     

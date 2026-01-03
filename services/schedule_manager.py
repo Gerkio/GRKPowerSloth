@@ -37,7 +37,7 @@ class ScheduleManager(QObject):
         # Timer para verificar eventos cada minuto
         self._check_timer = QTimer(self)
         self._check_timer.timeout.connect(self._check_scheduled_events)
-        self._check_timer.setInterval(60000)  # 1 minuto
+        self._check_timer.setInterval(30000)  # 30 segundos para mayor precisión
         
         # Cargar datos
         self._ensure_settings_dir()

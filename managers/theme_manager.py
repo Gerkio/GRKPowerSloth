@@ -228,9 +228,20 @@ class ThemeManager:
         
         # Generar flechas dinámicas con ALTO CONTRASTE y tamaño mayor
         # Si el fondo es oscuro, flechas blancas. Si es claro, flechas negras.
-        arrow_color = "#FFFFFF" if palette.background == "#1a1a1a" else "#000000"
+        # Comprobar si es un tema oscuro basado en la luminosidad o una lista de fondos oscuros
+        dark_backgrounds = ["#121212", "#2E3440", "#282A36", "#050505", "#000000"]
+        arrow_color = "#FFFFFF" if palette.background.upper() in [bg.upper() for bg in dark_backgrounds] else "#000000"
+        
+        # Para el tema de alto contraste, forzar blanco si el fondo es negro
+        if palette.background == "#000000":
+            arrow_color = "#FFFFFF"
+            
         arrow_up = cls._get_arrow_svg(arrow_color, True)
         arrow_down = cls._get_arrow_svg(arrow_color, False)
+        
+        # Grosor de bordes para alto contraste
+        border_width = "2px" if palette.background == "#000000" else "1px"
+        border_width_focus = "3px" if palette.background == "#000000" else "2px"
         
         # Tamaño de botones escalado (más grande)
         spin_btn_width = int(24 * scale_factor)
@@ -254,7 +265,7 @@ class ThemeManager:
             /* ===== GROUP BOX - Estilo tarjeta ===== */
             QGroupBox {{
                 background-color: {palette.surface};
-                border: 1px solid {palette.border};
+                border: {border_width} solid {palette.border};
                 border-radius: 8px;
                 margin-top: 16px;
                 padding: 15px 10px 10px 10px;
@@ -337,7 +348,7 @@ class ThemeManager:
             QPushButton {{
                 background-color: {palette.surface};
                 color: {palette.text_primary};
-                border: 1px solid {palette.border};
+                border: {border_width} solid {palette.border};
                 border-radius: 6px;
                 padding: 10px 20px;
                 font-weight: 500;
@@ -386,7 +397,7 @@ class ThemeManager:
             QSpinBox, QTimeEdit {{
                 background-color: {palette.surface};
                 color: {palette.text_primary};
-                border: 2px solid {palette.border};
+                border: {border_width_focus} solid {palette.border};
                 border-radius: 6px;
                 padding: 6px 10px;
                 min-height: 24px;
@@ -400,6 +411,12 @@ class ThemeManager:
             QSpinBox:focus, QTimeEdit:focus {{
                 border-color: {palette.accent_primary};
                 background-color: {palette.surface_hover};
+            }}
+            
+            /* Error States */
+            QSpinBox[error="true"] {{
+                border-color: #ef4444 !important;
+                background-color: {"#3a1a1a" if palette.background != "#FFFFFF" else "#ffe0e0"} !important;
             }}
             
             QSpinBox::up-button, QSpinBox::down-button,
@@ -432,7 +449,7 @@ class ThemeManager:
             QComboBox {{
                 background-color: {palette.surface};
                 color: {palette.text_primary};
-                border: 2px solid {palette.border};
+                border: {border_width_focus} solid {palette.border};
                 border-radius: 6px;
                 padding: 6px 12px;
                 min-height: 24px;
@@ -472,7 +489,7 @@ class ThemeManager:
             QLineEdit {{
                 background-color: {palette.surface};
                 color: {palette.text_primary};
-                border: 2px solid {palette.border};
+                border: {border_width_focus} solid {palette.border};
                 border-radius: 6px;
                 padding: 6px 12px;
                 min-height: 24px;
@@ -514,7 +531,7 @@ class ThemeManager:
             QMenuBar {{
                 background-color: {palette.surface};
                 color: {palette.text_primary};
-                border-bottom: 1px solid {palette.border};
+                border-bottom: {border_width} solid {palette.border};
                 padding: 4px 8px;
                 spacing: 4px;
             }}
@@ -593,7 +610,7 @@ class ThemeManager:
             QToolTip {{
                 background-color: {palette.surface};
                 color: {palette.text_primary};
-                border: 1px solid {palette.accent_primary};
+                border: {border_width} solid {palette.accent_primary};
                 border-radius: 6px;
                 padding: 8px 12px;
                 font-size: 9pt;
@@ -602,7 +619,7 @@ class ThemeManager:
             /* ===== CONDITION CONTAINER (Monitor Mode) ===== */
             #conditionContainer {{
                 background-color: {palette.surface};
-                border: 1px solid {palette.border};
+                border: {border_width} solid {palette.border};
                 border-radius: 8px;
             }}
             

@@ -16,7 +16,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, QThread
 # Constantes del Repositorio
 GITHUB_USER = "Gerkio"
 GITHUB_REPO = "GRKPowerSloth"
-CURRENT_VERSION = "6.0.0"  # Sincronizar con localization o main
+CURRENT_VERSION = "6.0.2"  # Sincronizar con localization o main
 
 class DownloadWorker(QThread):
     """Worker thread para descargar la actualización sin congelar la UI"""

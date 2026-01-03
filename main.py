@@ -100,15 +100,30 @@ def global_exception_handler(exctype, value, traceback):
         sys.__excepthook__(exctype, value, traceback)
         return
         
-    error_msg = f"Ha ocurrido un error inesperado:\n\n{value}\n\nLa aplicación debe cerrarse."
+    # Intentar obtener mensajes localizados
+    try:
+        from managers.localization_manager import LocalizationManager
+        title = LocalizationManager.get("error_critical_title")
+        if title == "error_critical_title": title = "Critical Error"
+        
+        # Formatear mensaje
+        base_msg = LocalizationManager.get("error_unexpected")
+        if base_msg == "error_unexpected": 
+            base_msg = "An unexpected error has occurred:\n\n{0}\n\nThe application must close."
+        
+        error_msg = base_msg.format(value)
+    except:
+        title = "GRK PowerSloth Error"
+        error_msg = f"An unexpected error has occurred:\n\n{value}\n\nThe application must close."
     
     # Intentar mostrar diálogo visual
     try:
         if QApplication.instance():
-            QMessageBox.critical(None, "Error Crítico", error_msg)
+            # Asegurarse de que no esté oculto o minimizado permanentemente
+            QMessageBox.critical(None, title, error_msg)
         else:
             # Fallback nativo
-            ctypes.windll.user32.MessageBoxW(0, error_msg, "GRK PowerSloth Error", 0x10)
+            ctypes.windll.user32.MessageBoxW(0, error_msg, title, 0x10)
     except:
         pass
         
@@ -131,7 +146,7 @@ def main():
     # Crear aplicación Qt
     app = QApplication(sys.argv)
     app.setApplicationName("GRK PowerSloth")
-    app.setApplicationVersion("6.0.1")  # Definitive Version
+    app.setApplicationVersion("6.0.2")  # Definitive Version
     app.setOrganizationName("Gerkio")
 
     # ===== SINGLETON CHECK (Instancia Única) =====
