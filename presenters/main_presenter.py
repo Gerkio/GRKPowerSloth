@@ -132,6 +132,10 @@ class MainPresenter(QObject):
         self.view.schedule_clicked.connect(self._on_schedule_clicked)
         self.view.history_clicked.connect(self._on_history_clicked)
         self.view.compact_mode_changed.connect(self._on_compact_mode_changed)
+        
+        # Modo Compacto
+        self.view.add_time_clicked.connect(self._on_add_time_clicked)
+        self.view.sub_time_clicked.connect(self._on_sub_time_clicked)
     
     # ===== HANDLERS DEL CICLO DE VIDA =====
     
@@ -613,7 +617,47 @@ class MainPresenter(QObject):
         self.view.set_compact_mode(enabled)
         self.settings.compact_mode = enabled
         SettingsManager.save(self.settings)
+
+    # ===== HANDLERS DE TIEMPO (MODO COMPACTO) =====
     
+    def _on_add_time_clicked(self):
+        """Suma 5 minutos al tiempo actual"""
+        INCREMENT = 5 * 60
+        if self.is_running:
+            self.remaining_seconds += INCREMENT
+            self.total_seconds += INCREMENT # Mantener escala de barra de progreso
+            self._update_countdown_display()
+        else:
+            h, m, s = self.view.get_countdown_time()
+            total = h * 3600 + m * 60 + s + INCREMENT
+            self._update_spinboxes_from_seconds(total)
+            self._update_end_time_preview()
+            # Forzar actualización de label mini
+            self.view.update_status(self.view.lbl_status.text())
+
+    def _on_sub_time_clicked(self):
+        """Resta 5 minutos al tiempo actual"""
+        DECREMENT = 5 * 60
+        if self.is_running:
+            if self.remaining_seconds > DECREMENT:
+                self.remaining_seconds -= DECREMENT
+                self.total_seconds = max(self.remaining_seconds, self.total_seconds - DECREMENT)
+                self._update_countdown_display()
+        else:
+            h, m, s = self.view.get_countdown_time()
+            total = max(0, h * 3600 + m * 60 + s - DECREMENT)
+            self._update_spinboxes_from_seconds(total)
+            self._update_end_time_preview()
+            # Forzar actualización de label mini
+            self.view.update_status(self.view.lbl_status.text())
+
+    def _update_spinboxes_from_seconds(self, total_seconds: int):
+        """Helper para actualizar los spinboxes desde un total de segundos"""
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        self.view.set_countdown_time(hours, minutes, seconds)
+
     def _on_scheduled_event_triggered(self, event):
         """Handler cuando se dispara un evento programado"""
         action_name = event.get_action_name()

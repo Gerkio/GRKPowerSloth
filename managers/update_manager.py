@@ -10,13 +10,12 @@ import requests
 import subprocess
 from pathlib import Path
 from typing import Optional, Tuple, Callable
-from packaging import version
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
 # Constantes del Repositorio
 GITHUB_USER = "Gerkio"
 GITHUB_REPO = "GRKPowerSloth"
-CURRENT_VERSION = "6.0.2"  # Sincronizar con localization o main
+CURRENT_VERSION = "6.1.0"  # Sincronizar con localization o main
 
 class DownloadWorker(QThread):
     """Worker thread para descargar la actualización sin congelar la UI"""
@@ -74,19 +73,29 @@ class UpdateManager(QObject):
                 data = response.json()
                 latest_tag = data.get("tag_name", "v0.0.0").lstrip('v')
                 
-                # Comparar versiones semánticamente
-                if version.parse(latest_tag) > version.parse(CURRENT_VERSION):
-                    # Encontrar el asset .exe
-                    download_url = None
-                    for asset in data.get("assets", []):
-                        if asset["name"].endswith(".exe"):
-                            download_url = asset["browser_download_url"]
-                            break
+                # Comparar versiones semánticamente (ej: "6.0.2" -> (6, 0, 2))
+                def parse_v(v_str):
+                    return tuple(map(int, (v_str.split('.'))))
+
+                try:
+                    latest_tuple = parse_v(latest_tag)
+                    current_tuple = parse_v(CURRENT_VERSION)
                     
-                    if download_url:
-                        changelog = data.get("body", "Mejoras de rendimiento y corrección de errores.")
-                        self.update_available.emit(latest_tag, download_url, changelog)
-                        return
+                    if latest_tuple > current_tuple:
+                        # Encontrar el asset .exe
+                        download_url = None
+                        for asset in data.get("assets", []):
+                            if asset["name"].endswith(".exe"):
+                                download_url = asset["browser_download_url"]
+                                break
+                        
+                        if download_url:
+                            changelog = data.get("body", "Mejoras de rendimiento y corrección de errores.")
+                            self.update_available.emit(latest_tag, download_url, changelog)
+                            return
+                except Exception as ex:
+                    logging.error(f"Error parsing versions: {ex}")
+                    
                     
             if manual_check:
                 self.check_failed.emit("Ya tienes la última versión.")

@@ -60,6 +60,10 @@ class MainWindow(QMainWindow):
     language_changed = pyqtSignal(object)     # Language
     specific_time_changed = pyqtSignal(object) # QTime
     
+    # Acciones de Modo Compacto
+    add_time_clicked = pyqtSignal()
+    sub_time_clicked = pyqtSignal()
+    
     # Monitor de procesos
     refresh_processes_clicked = pyqtSignal()
     monitor_mode_changed = pyqtSignal(bool)   # True = exit, False = network
@@ -119,16 +123,39 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         self._main_layout = QVBoxLayout(central_widget)
-        self._main_layout.setSpacing(DisplayHelper.get_spacing(10))
-        self._main_layout.setContentsMargins(
+        self._main_layout.setContentsMargins(0, 0, 0, 0)
+        self._main_layout.setSpacing(0)
+        
+        # --- CONTAINER ESTÁNDAR ---
+        self.standard_container = QWidget()
+        self._standard_layout = QVBoxLayout(self.standard_container)
+        self._standard_layout.setSpacing(DisplayHelper.get_spacing(10))
+        self._standard_layout.setContentsMargins(
             DisplayHelper.get_padding(14),
             DisplayHelper.get_padding(14),
             DisplayHelper.get_padding(14),
             DisplayHelper.get_padding(14)
         )
+        self._main_layout.addWidget(self.standard_container)
+        self._setup_standard_ui(self._standard_layout)
         
+        # --- CONTAINER COMPACTO (Mini Controller) ---
+        self.compact_container = QWidget()
+        self.compact_container.setVisible(False)
+        self._compact_layout = QVBoxLayout(self.compact_container)
+        self._compact_layout.setContentsMargins(
+            DisplayHelper.get_padding(10),
+            DisplayHelper.get_padding(5),
+            DisplayHelper.get_padding(10),
+            DisplayHelper.get_padding(5)
+        )
+        self._main_layout.addWidget(self.compact_container)
+        self._setup_compact_ui(self._compact_layout)
+        
+    def _setup_standard_ui(self, main_layout):
+        """Configura la interfaz estándar completa"""
         # Referencia para usar en el resto del setup
-        main_layout = self._main_layout
+        # (El código siguiente es el original de _setup_ui movido aquí)
         
         # ========== GRUPO: CONDICIÓN DE DISPARO (Layout Horizontal) ==========
         self.group_trigger = QGroupBox(LocalizationManager.get("trigger_condition_label"))
@@ -361,6 +388,74 @@ class MainWindow(QMainWindow):
         buttons_layout.addWidget(self.btn_start, 1)
         buttons_layout.addWidget(self.btn_stop, 1)
         main_layout.addLayout(buttons_layout)
+        
+    def _setup_compact_ui(self, main_layout):
+        """Configura la interfaz minimalista (Mini Controller)"""
+        # El Mini Controller es una "píldora" horizontal
+        mini_widget = QWidget()
+        mini_widget.setObjectName("miniController")
+        mini_layout = QHBoxLayout(mini_widget)
+        mini_layout.setContentsMargins(15, 10, 15, 10)
+        mini_layout.setSpacing(15)
+        
+        # 1. Botón de Expandir (Volver a modo normal)
+        self.btn_expand_mini = QPushButton("↗️")
+        self.btn_expand_mini.setObjectName("btnExpandMini")
+        self.btn_expand_mini.setFixedSize(30, 30)
+        self.btn_expand_mini.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_expand_mini.setToolTip(LocalizationManager.get("menu_compact"))
+        
+        # 2. Timer Mini con Controles de Tiempo
+        time_container = QWidget()
+        time_layout = QHBoxLayout(time_container)
+        time_layout.setContentsMargins(0, 0, 0, 0)
+        time_layout.setSpacing(5)
+        
+        self.btn_sub_time_mini = QPushButton("-")
+        self.btn_sub_time_mini.setObjectName("btnTimeAdjustMini")
+        self.btn_sub_time_mini.setFixedSize(24, 24)
+        
+        self.lbl_timer_mini = QLabel("00:30:00")
+        self.lbl_timer_mini.setObjectName("timerMini")
+        self.lbl_timer_mini.setFont(QFont("Consolas", 22, QFont.Weight.Bold))
+        self.lbl_timer_mini.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.btn_add_time_mini = QPushButton("+")
+        self.btn_add_time_mini.setObjectName("btnTimeAdjustMini")
+        self.btn_add_time_mini.setFixedSize(24, 24)
+        
+        time_layout.addWidget(self.btn_sub_time_mini)
+        time_layout.addWidget(self.lbl_timer_mini)
+        time_layout.addWidget(self.btn_add_time_mini)
+        
+        # 3. Selector de Acción Mini (Icono)
+        self.lbl_action_mini = QLabel("🛑") # Se actualizará dinámicamente
+        self.lbl_action_mini.setObjectName("actionIconMini")
+        self.lbl_action_mini.setFont(QFont("Segoe UI Emoji", 18))
+        
+        # 4. Botón Start/Stop Mini (Circular)
+        self.btn_start_stop_mini = QPushButton("▶")
+        self.btn_start_stop_mini.setObjectName("btnStartStopMini")
+        self.btn_start_stop_mini.setFixedSize(45, 45)
+        self.btn_start_stop_mini.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        mini_layout.addWidget(self.btn_expand_mini)
+        mini_layout.addStretch()
+        mini_layout.addWidget(time_container)
+        mini_layout.addStretch()
+        mini_layout.addWidget(self.lbl_action_mini)
+        mini_layout.addWidget(self.btn_start_stop_mini)
+        
+        main_layout.addWidget(mini_widget)
+        
+        # 4. Tiny Progress Bar al fondo
+        self.mini_progress_bar = QProgressBar()
+        self.mini_progress_bar.setObjectName("miniProgressBar")
+        self.mini_progress_bar.setFixedHeight(4)
+        self.mini_progress_bar.setTextVisible(False)
+        self.mini_progress_bar.setRange(0, 100)
+        self.mini_progress_bar.setValue(0)
+        main_layout.addWidget(self.mini_progress_bar)
     
     def _setup_menu(self):
         """Configura la barra de menú"""
@@ -537,6 +632,12 @@ class MainWindow(QMainWindow):
         self.chk_force_close.toggled.connect(self.force_close_changed.emit)
         self.chk_prevent_sleep.toggled.connect(self.prevent_sleep_changed.emit)
         
+        # Botón Mini
+        self.btn_start_stop_mini.clicked.connect(self._on_mini_btn_clicked)
+        self.btn_expand_mini.clicked.connect(lambda: self.action_compact_mode.setChecked(False))
+        self.btn_add_time_mini.clicked.connect(self.add_time_clicked.emit)
+        self.btn_sub_time_mini.clicked.connect(self.sub_time_clicked.emit)
+        
         # Monitor de procesos
         # self.txt_process_filter eliminado
         self.btn_refresh_processes.clicked.connect(self.refresh_processes_clicked.emit)
@@ -573,6 +674,13 @@ class MainWindow(QMainWindow):
     
     # ===== HANDLERS INTERNOS =====
     
+    def _on_mini_btn_clicked(self):
+        """Handler para el botón único en modo compacto"""
+        if self.btn_stop.isEnabled():
+            self.stop_clicked.emit()
+        else:
+            self.start_clicked.emit()
+            
     def _on_action_changed(self, idx: int):
         """Handler cuando cambia la acción seleccionada"""
         if idx >= 0 and idx < len(PowerAction):
@@ -753,8 +861,14 @@ class MainWindow(QMainWindow):
     
     def set_action(self, action: PowerAction):
         """Establece la acción seleccionada"""
-        self.cmb_action.setCurrentIndex(action.value if isinstance(action, PowerAction) else action)
+        idx = action.value if isinstance(action, PowerAction) else action
+        self.cmb_action.setCurrentIndex(idx)
         self._update_panel_visibility()
+        
+        # Sincronizar icono mini
+        icons = ["🔌", "🔄", "🌙", "⚙️", "❄️"]
+        if 0 <= idx < len(icons):
+            self.lbl_action_mini.setText(icons[idx])
     
     def set_available_actions(self, actions: list):
         """Establece las acciones disponibles (lista de strings)"""
@@ -801,11 +915,24 @@ class MainWindow(QMainWindow):
     def update_status(self, message: str):
         """Actualiza el texto de estado"""
         self.lbl_status.setText(message)
+        
+        # En modo compacto, extraemos el tiempo (si existe formato HH:MM:SS)
+        import re
+        time_match = re.search(r'(\d{2}:\d{2}:\d{2})', message)
+        if time_match:
+            self.lbl_timer_mini.setText(time_match.group(1))
+        else:
+            # Si no hay tiempo en el mensaje, intentamos forzar una actualización desde los spinners
+            # Esto evita que se quede con un tiempo antiguo al resetear
+            h, m, s = self.get_countdown_time()
+            self.lbl_timer_mini.setText(f"{h:02d}:{min(59, m):02d}:{min(59, s):02d}")
     
     def update_progress_bar(self, value: int, maximum: int):
         """Actualiza la barra de progreso"""
         self.progress_bar.setMaximum(maximum)
         self.progress_bar.setValue(value)
+        self.mini_progress_bar.setMaximum(maximum)
+        self.mini_progress_bar.setValue(value)
     
     def set_progress_bar_color(self, color: str):
         """Establece el color de la barra de progreso"""
@@ -851,6 +978,12 @@ class MainWindow(QMainWindow):
         # Botones
         self.btn_start.setEnabled(enabled)
         self.btn_stop.setEnabled(is_running)
+        self.btn_start_stop_mini.setText("⏹" if is_running else "▶")
+        
+        # Modo Compacto - Estos se mantienen habilitados
+        self.btn_expand_mini.setEnabled(True)
+        self.btn_add_time_mini.setEnabled(True)
+        self.btn_sub_time_mini.setEnabled(True)
         
         # Menú
         self.action_start.setEnabled(enabled)
@@ -970,29 +1103,23 @@ class MainWindow(QMainWindow):
     
     def _apply_compact_mode(self, enabled: bool):
         """Aplica los cambios de visibilidad para el modo compacto"""
-        # Elementos a ocultar/mostrar
-        elements_to_toggle = [
-            self.group_trigger,
-            self.chk_force_close,
-            self.chk_prevent_sleep
-        ]
-        
-        for widget in elements_to_toggle:
-            widget.setVisible(not enabled)
+        # Cambiar visibilidad de los containers primarios
+        self.standard_container.setVisible(not enabled)
+        self.compact_container.setVisible(enabled)
             
-        # Si estamos en modo compacto, el GroupBox de acción puede simplificarse
         if enabled:
-            # En modo compacto, solo mostramos el timer/progreso y botones start/stop
-            self.setFixedWidth(DisplayHelper.scale_value(320))
-            self.setFixedHeight(DisplayHelper.scale_value(220))
+            # En modo compacto, el Mini Controller es una barra horizontal
+            self.setFixedWidth(DisplayHelper.scale_value(400))
+            self.setFixedHeight(DisplayHelper.scale_value(100))
+            # Quitar menú en modo compacto para limpieza total (opcional)
+            self.menuBar().setVisible(False)
         else:
+            # Volver a tamaño original
             self.setFixedWidth(DisplayHelper.scale_value(480))
             self.setMinimumHeight(DisplayHelper.scale_value(550))
-            self.setMaximumHeight(2000) # Permitir que crezca if needed
+            self.setMaximumHeight(2000)
+            self.menuBar().setVisible(True)
             self.adjustSize()
-        
-        # Centrar ventana si el modo cambia (opcional, pero ayuda)
-        # self.move(QApplication.primaryScreen().geometry().center() - self.rect().center())
             
         # Forzar reajuste de layout
         self.adjustSize()

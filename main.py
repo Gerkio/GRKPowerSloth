@@ -146,7 +146,7 @@ def main():
     # Crear aplicación Qt
     app = QApplication(sys.argv)
     app.setApplicationName("GRK PowerSloth")
-    app.setApplicationVersion("6.0.2")  # Definitive Version
+    app.setApplicationVersion("6.1.0")  # Definitive Version
     app.setOrganizationName("Gerkio")
 
     # ===== SINGLETON CHECK (Instancia Única) =====

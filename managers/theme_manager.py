@@ -652,6 +652,89 @@ class ThemeManager:
             #conditionContainer QRadioButton::indicator:hover {{
                 border-color: {palette.accent_hover};
             }}
+            
+            /* ===== MINI CONTROLLER (Compact Mode) ===== */
+            #miniController {{
+                background-color: {palette.surface};
+                border: {border_width} solid {palette.accent_primary};
+                border-radius: 40px; /* Pill shape */
+                margin: 5px;
+            }}
+            
+            #timerMini {{
+                color: {palette.text_primary};
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 24pt;
+                font-weight: bold;
+                background: transparent;
+                padding: 0px 10px;
+                min-width: 140px;
+            }}
+            
+            #actionIconMini {{
+                background: transparent;
+                padding: 0;
+            }}
+            
+            #btnExpandMini {{
+                background: transparent;
+                border: none;
+                font-size: 14pt;
+                padding: 2px;
+                color: {palette.text_disabled};
+            }}
+            
+            #btnExpandMini:hover {{
+                color: {palette.accent_primary};
+            }}
+            
+            #btnTimeAdjustMini {{
+                background-color: {palette.surface_hover};
+                color: {palette.text_primary};
+                border: 1px solid {palette.border};
+                border-radius: 12px;
+                font-size: 11pt;
+                font-weight: bold;
+                padding: 0;
+            }}
+            
+            #btnTimeAdjustMini:hover {{
+                background-color: {palette.accent_primary};
+                color: #ffffff;
+                border-color: {palette.accent_primary};
+            }}
+            
+            #btnStartStopMini {{
+                background-color: {palette.accent_primary};
+                color: #ffffff;
+                border: none;
+                border-radius: 22px; /* Circular */
+                font-size: 16pt;
+                padding: 0;
+                min-width: 45px;
+                min-height: 45px;
+            }}
+            
+            #btnStartStopMini:hover {{
+                background-color: {palette.accent_hover};
+            }}
+            
+            #btnStartStopMini:pressed {{
+                background-color: {palette.accent_pressed};
+            }}
+            
+            #miniProgressBar {{
+                background-color: transparent;
+                border: none;
+                border-radius: 0;
+                min-height: 4px;
+                max-height: 4px;
+            }}
+            
+            #miniProgressBar::chunk {{
+                background-color: {palette.accent_primary};
+                border-radius: 2px;
+            }}
         """
         
         widget.setStyleSheet(stylesheet)

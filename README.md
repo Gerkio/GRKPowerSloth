@@ -3,23 +3,23 @@
 **El programador de apagado definitivo para Windows.**  
 Automatiza el apagado, reinicio o suspensión de tu PC basándose en tiempo o actividad de procesos. Ideal para dejar renderizando, descargando o compilando por la noche.
 
-![GRK PowerSloth Banner](https://via.placeholder.com/800x200?text=GRK+PowerSloth+UI+Placeholder)
+![GRK PowerSloth UI](https://via.placeholder.com/800x400?text=GRK+PowerSloth+v6.1.0+Mini+Controller)
 
-## ✨ Características Principales
+## ✨ Novedades en v6.1.0
+*   **🆕 Nuevo Mini-Controlador (Modo Compacto):** Una interfaz minimalista tipo "píldora" con temporizador digital y botones de ajuste rápido.
+*   **⏱️ Ajuste en Tiempo Real:** Suma o resta tiempo (+/- 5 min) directamente desde el modo compacto sin detener el temporizador.
+*   **🔄 Transiciones Suaves:** Animaciones de fundido al alternar entre el modo completo y compacto.
+
+## 🚀 Características Principales
 
 *   **⏱️ Modos de Disparo Flexibles:**
     *   **Cuenta Regresiva:** "Apagar en 2 horas".
     *   **Hora Fija:** "Apagar a las 03:00 AM".
-    *   **Monitor de Actividad:** "Apagar cuando termine de renderizar Adobe Premiere" o "Cuando la descarga de Chrome finalice".
-*   **🎨 Temas Visuales Premium:**
-    *   Incluye temas: Nordic Night, Dracula, Blood Moon, Dark & Light.
-*   **🌍 Multi-idioma:**
-    *   Español, Inglés, Portugués, Francés.
-*   **🚀 Auto-Update (OTA):**
-    *   Actualízate a la última versión directamente desde la app.
-*   **🔧 Herramientas Útiles:**
-    *   Forzar cierre de apps colgadas.
-    *   Prevenir suspensión (Keep Awake) mientras corre el temporizador.
+    *   **Monitor de Actividad:** "Apagar cuando termine de renderizar" o "Cuando la red esté inactiva".
+*   **🎨 Temas Visuales Premium:** Nordic Night, Dracula, Blood Moon, Dark & Light y Alto Contraste.
+*   **🌍 Multi-idioma:** Español, Inglés, Portugués, Francés.
+*   **🚀 Auto-Update (OTA):** Actualizaciones automáticas desde la app.
+*   **🔧 Herramientas Útiles:** Forzar cierre de apps y modo "Keep Awake".
 
 ## 📥 Descarga e Instalación
 
@@ -30,8 +30,8 @@ Automatiza el apagado, reinicio o suspensión de tu PC basándose en tiempo o ac
 ## 🛠️ Tecnologías
 
 *   **Lenguaje:** Python 3.12+
-*   **GUI:** PyQt6 (Modern Risk-Free UI)
-*   **Sistema:** Windows API (para control de energía y procesos)
+*   **GUI:** PyQt6 (Modern & Responsive UI)
+*   **Sistema:** Windows API
 
 ---
 *Desarrollado con ❤️ por **Gerkio***
