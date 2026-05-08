@@ -3,6 +3,18 @@
 **El programador de apagado definitivo para Windows.**  
 Automatiza el apagado, reinicio o suspensión de tu PC basándose en tiempo o actividad de procesos. Ideal para dejar renderizando, descargando o compilando por la noche.
 
+## ✨ Novedades en v6.1.1
+
+Versión de mantenimiento centrada en **robustez** y **consistencia de UI**. Sin cambios funcionales mayores; mismo comportamiento de cara al usuario, pero más resistente y pulida.
+
+*   **🌍 Localización al 100%:** Los menús, el aviso de "ya en ejecución" y el diálogo de actualización ahora cambian de idioma sin dejar fragmentos en español. Temas Nordic / Dracula / Blood Moon e idiomas Português / Français se traducen al cambiar idioma.
+*   **🛡️ Calendario más fiable:** Mejor manejo de eventos a fin de mes (día 31 en febrero, etc.), cambios de hora del sistema y DST. Sin doble disparo. Escritura atómica de eventos e historial.
+*   **🔒 OTA más robusto:** Timeout en la descarga, validación de espacio en disco, cancelación limpia desde el botón cerrar, y rollback automático si falla el swap del `.exe`.
+*   **⚙️ Iniciar con Windows:** Si mueves el `.exe` a otra carpeta tras habilitar autostart, la app lo detecta y desactiva la opción en vez de fallar al arrancar Windows.
+*   **🐛 Bugfixes destacados:** Eliminado el bug del countdown que se reescribía con el valor del spinbox; animaciones del modo compacto sin slots colgando al alternar rápido; el `closeEvent` detiene todos los timers correctamente.
+
+> Para el detalle completo de los 23 ítems de auditoría aplicados, ver [`CHANGELOG.md`](CHANGELOG.md).
+
 ## ✨ Novedades en v6.1.0
 *   **🆕 Nuevo Mini-Controlador (Modo Compacto):** Una interfaz minimalista tipo "píldora" con temporizador digital y botones de ajuste rápido.
 *   **⏱️ Ajuste en Tiempo Real:** Suma o resta tiempo (+/- 5 min) directamente desde el modo compacto sin detener el temporizador.
