@@ -10,8 +10,12 @@ __pycache__/
 
 # Entornos virtuales
 venv/
+.venv/
 env/
 .env
+
+# Claude Code (config local por máquina; el agente compartido sí se versiona)
+.claude/settings.local.json
 
 # PyInstaller (Carpetas de compilación)
 build/

@@ -19,7 +19,6 @@ from services.settings_manager import SettingsManager, AppSettings
 from services.system_integration import SystemIntegration
 from managers.localization_manager import LocalizationManager
 from managers.theme_manager import ThemeManager
-# from managers.notification_manager import NotificationManager (Removed native lib dependency)
 from managers.update_manager import UpdateManager
 from services.schedule_manager import ScheduleManager
 from ui.update_dialog import UpdateDialog
@@ -184,6 +183,7 @@ class MainPresenter(QObject):
         
         self._deactivate_keep_awake()
         self.process_monitor.stop_monitoring()
+        self.schedule_manager.stop_monitoring()
         self.countdown_timer.stop()
     
     def _on_window_state_changed(self, state):
@@ -255,7 +255,7 @@ class MainPresenter(QObject):
         """Inicia el modo de monitoreo de procesos"""
         selected_process = self.view.get_selected_process()
         if not selected_process:
-            self.view.show_error_message("Error", "Selecciona un proceso primero.")
+            self.view.show_error_message("Error", LocalizationManager.get("warn_select_process"))
             return
         
         try:
@@ -436,22 +436,23 @@ class MainPresenter(QObject):
         
         # Mostrar diálogo de advertencia
         if self.view.show_warning_dialog(action_text):
-            self.view.update_status("Ejecutando...")
+            self.view.update_status(LocalizationManager.get("status_executing"))
             
             try:
-                force_flag = " /f" if self.view.get_is_force_close_enabled() else ""
-                
+                force_args = ["/f"] if self.view.get_is_force_close_enabled() else []
+
                 if action == PowerAction.SHUTDOWN:
-                    subprocess.run(f"shutdown /s{force_flag} /t 0", shell=True)
+                    subprocess.run(["shutdown", "/s", *force_args, "/t", "0"], shell=False)
                 elif action == PowerAction.RESTART:
-                    subprocess.run(f"shutdown /r{force_flag} /t 0", shell=True)
+                    subprocess.run(["shutdown", "/r", *force_args, "/t", "0"], shell=False)
                 elif action == PowerAction.RESTART_UEFI:
-                    subprocess.run(f"shutdown /r /fw{force_flag} /t 0", shell=True)
+                    subprocess.run(["shutdown", "/r", "/fw", *force_args, "/t", "0"], shell=False)
                 elif action == PowerAction.HIBERNATE:
-                    subprocess.run("shutdown /h", shell=True)
+                    subprocess.run(["shutdown", "/h"], shell=False)
                 elif action == PowerAction.SLEEP:
-                    subprocess.run("rundll32.exe powrprof.dll,SetSuspendState 0,1,0", shell=True)
-                
+                    # Win32 directo evita levantar cmd.exe + rundll32 sólo para suspender.
+                    ctypes.windll.powrprof.SetSuspendState(0, 1, 0)
+
                 QApplication.quit()
             
             except Exception as e:
@@ -576,7 +577,11 @@ class MainPresenter(QObject):
     def _on_update_check_failed(self, error_msg):
         """No hay actualizaciones o error"""
         from PyQt6.QtWidgets import QMessageBox
-        QMessageBox.information(self.view, "Buscar Actualizaciones", error_msg)
+        QMessageBox.information(
+            self.view,
+            LocalizationManager.get("menu_check_updates").replace("&", ""),
+            error_msg,
+        )
 
     # ===== WATCHDOG =====
 
@@ -584,8 +589,7 @@ class MainPresenter(QObject):
         """Handler cuando se habilita/deshabilita el watchdog"""
         self.settings.watchdog_enabled = enabled
         SettingsManager.save(self.settings)
-        
-        # from managers.notification_manager import NotificationManager
+
         if enabled:
             self.view.show_notification(
                 LocalizationManager.get("notification_watchdog_enabled"),

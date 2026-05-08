@@ -14,6 +14,7 @@ import time
 from collections import deque
 from typing import Optional
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+
 from models.enums import MonitoringMode
 
 
@@ -99,30 +100,25 @@ class ProcessMonitorService(QObject):
         try:
             self.stop_monitoring()
             self._log(f"Iniciando monitoreo de cierre para proceso ID: {pid}")
-            
+
             # Validar que el proceso existe
             if not psutil.pid_exists(pid):
                 raise ValueError(f"El proceso con ID {pid} no existe o ya ha terminado.")
-            
+
             self.monitored_process = psutil.Process(pid)
             self.monitoring_mode = MonitoringMode.ON_EXIT
             self.monitoring_start_time = time.time()
-            
+
             # Health check cada 5 segundos
             self.health_check_timer.start(5000)
-            
+
             self._log(f"Monitoreo iniciado correctamente para: {self.monitored_process.name()}")
-            
+
         except Exception as e:
-            # Reintentos con backoff exponencial
-            if self.retry_count < self.MAX_RETRIES:
-                self.retry_count += 1
-                self._log(f"Error al iniciar monitoreo (intento {self.retry_count}/{self.MAX_RETRIES}): {e}")
-                time.sleep(self.retry_count)  # Esperar 1s, 2s, 3s...
-                self.start_monitoring_for_exit(pid)
-            else:
-                self._log_error(f"Error fatal después de {self.MAX_RETRIES} intentos: {e}")
-                raise
+            # Sin reintentos: un proceso que ya no existe o no es accesible no se va
+            # a recuperar 1-3s después, y el time.sleep recursivo bloqueaba el hilo de la GUI.
+            self._log_error(f"Error al iniciar monitoreo: {e}")
+            raise
     
     def start_monitoring_for_network_idle(self, pid: int, process_name: str):
         """
@@ -149,14 +145,14 @@ class ProcessMonitorService(QObject):
         try:
             self.stop_monitoring()
             self._log(f"Iniciando monitoreo de red para proceso: {process_name} (ID: {pid})")
-            
+
             if not psutil.pid_exists(pid):
                 raise ValueError(f"El proceso con ID {pid} no existe.")
-            
+
             self.monitored_process = psutil.Process(pid)
             self.monitoring_mode = MonitoringMode.ON_NETWORK_IDLE
             self.monitoring_start_time = time.time()
-            
+
             # Intentar obtener IO counters (requiere permisos)
             try:
                 self.last_io_counters = self.monitored_process.io_counters()
@@ -164,24 +160,18 @@ class ProcessMonitorService(QObject):
             except psutil.AccessDenied:
                 self._log_error("Se requieren permisos de administrador para monitorear la actividad de red.")
                 raise PermissionError("Se requieren permisos de administrador para esta función.")
-            
+
             # Timer de monitoreo cada 2 segundos (intervalo rápido inicial)
             self.monitor_timer.start(2000)
-            
+
             # Health check cada 10 segundos
             self.health_check_timer.start(10000)
-            
+
             self._log("Monitoreo de red iniciado correctamente")
-            
+
         except Exception as e:
-            if self.retry_count < self.MAX_RETRIES:
-                self.retry_count += 1
-                self._log(f"Error al iniciar monitoreo de red (intento {self.retry_count}/{self.MAX_RETRIES}): {e}")
-                time.sleep(self.retry_count)
-                self.start_monitoring_for_network_idle(pid, process_name)
-            else:
-                self._log_error(f"Error fatal: {e}")
-                raise
+            self._log_error(f"Error al iniciar monitoreo de red: {e}")
+            raise
     
     def stop_monitoring(self):
         """

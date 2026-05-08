@@ -146,7 +146,7 @@ def main():
     # Crear aplicación Qt
     app = QApplication(sys.argv)
     app.setApplicationName("GRK PowerSloth")
-    app.setApplicationVersion("6.1.0")  # Definitive Version
+    app.setApplicationVersion("6.1.1")  # Definitive Version
     app.setOrganizationName("Gerkio")
 
     # ===== SINGLETON CHECK (Instancia Única) =====
@@ -155,10 +155,20 @@ def main():
     # Intentar adquirir el bloqueo con un timeout de 100ms
     # QLockFile es inteligente: si el proceso dueño murió, roba el lock.
     if not lock_file.tryLock(100):
-        # Ya existe una instancia
-        QMessageBox.warning(None, "GRK PowerSloth", "⚠️ La aplicación ya se está ejecutando.\nRevise la bandeja del sistema (ícono junto al reloj).")
+        # Ya existe una instancia. Pre-cargar idioma del usuario para localizar el aviso.
+        try:
+            from services.settings_manager import SettingsManager
+            from managers.localization_manager import LocalizationManager
+            from models.enums import Language
+            settings = SettingsManager.load()
+            LocalizationManager.set_language(Language(settings.current_language))
+            msg = LocalizationManager.get("singleton_message")
+        except Exception:
+            msg = "GRK PowerSloth is already running.\nCheck the system tray (icon next to the clock)."
+        QMessageBox.warning(None, "GRK PowerSloth", msg)
+        lock_file.unlock()
         sys.exit(0)
-        
+
     # Mantener referencia global para que no se recolecte y libere el lock
     app._lock_file = lock_file
 

@@ -460,9 +460,11 @@ class MainWindow(QMainWindow):
     def _setup_menu(self):
         """Configura la barra de menú"""
         menubar = self.menuBar()
-        
+
         # ========== MENÚ FILE ==========
-        menu_file = menubar.addMenu(LocalizationManager.get("menu_file"))
+        # Las refs a los menús se guardan como atributos para poder retitularlos en reapply_localization.
+        self.menu_file = menubar.addMenu(LocalizationManager.get("menu_file"))
+        menu_file = self.menu_file
         
         self.action_start = QAction(LocalizationManager.get("menu_start"), self)
         self.action_stop = QAction(LocalizationManager.get("menu_stop"), self)
@@ -487,7 +489,8 @@ class MainWindow(QMainWindow):
         menu_file.addAction(self.action_exit)
         
         # ========== MENÚ SETTINGS ==========
-        menu_settings = menubar.addMenu(LocalizationManager.get("menu_settings"))
+        self.menu_settings = menubar.addMenu(LocalizationManager.get("menu_settings"))
+        menu_settings = self.menu_settings
         
         self.action_start_with_windows = QAction(LocalizationManager.get("menu_start_with_windows"), self)
         self.action_start_with_windows.setCheckable(True)
@@ -505,7 +508,8 @@ class MainWindow(QMainWindow):
         menu_settings.addSeparator()
         
         # Submenú Theme
-        menu_theme = menu_settings.addMenu(LocalizationManager.get("menu_theme"))
+        self.menu_theme = menu_settings.addMenu(LocalizationManager.get("menu_theme"))
+        menu_theme = self.menu_theme
         
         theme_group = QActionGroup(self)
         
@@ -518,15 +522,15 @@ class MainWindow(QMainWindow):
         self.action_theme_dark.setChecked(True)  # Default
         theme_group.addAction(self.action_theme_dark)
         
-        self.action_theme_nordic = QAction("Nordic Night", self)
+        self.action_theme_nordic = QAction(LocalizationManager.get("theme_nordic"), self)
         self.action_theme_nordic.setCheckable(True)
         theme_group.addAction(self.action_theme_nordic)
-        
-        self.action_theme_dracula = QAction("Dracula", self)
+
+        self.action_theme_dracula = QAction(LocalizationManager.get("theme_dracula"), self)
         self.action_theme_dracula.setCheckable(True)
         theme_group.addAction(self.action_theme_dracula)
-        
-        self.action_theme_blood = QAction("Blood Moon", self)
+
+        self.action_theme_blood = QAction(LocalizationManager.get("theme_blood"), self)
         self.action_theme_blood.setCheckable(True)
         theme_group.addAction(self.action_theme_blood)
         
@@ -542,7 +546,8 @@ class MainWindow(QMainWindow):
         menu_theme.addAction(self.action_theme_high_contrast)
         
         # Submenú Language
-        menu_language = menu_settings.addMenu(LocalizationManager.get("menu_language"))
+        self.menu_language = menu_settings.addMenu(LocalizationManager.get("menu_language"))
+        menu_language = self.menu_language
         
         lang_group = QActionGroup(self)
         
@@ -555,11 +560,11 @@ class MainWindow(QMainWindow):
         self.action_lang_spanish.setChecked(True)  # Default
         lang_group.addAction(self.action_lang_spanish)
         
-        self.action_lang_portuguese = QAction("Português (Brasil)", self)
+        self.action_lang_portuguese = QAction(LocalizationManager.get("menu_portuguese"), self)
         self.action_lang_portuguese.setCheckable(True)
         lang_group.addAction(self.action_lang_portuguese)
-        
-        self.action_lang_french = QAction("Français", self)
+
+        self.action_lang_french = QAction(LocalizationManager.get("menu_french"), self)
         self.action_lang_french.setCheckable(True)
         lang_group.addAction(self.action_lang_french)
         
@@ -569,9 +574,10 @@ class MainWindow(QMainWindow):
         menu_language.addAction(self.action_lang_french)
         
         # ========== MENÚ HELP ==========
-        menu_help = menubar.addMenu(LocalizationManager.get("menu_help"))
-        
-        self.action_check_updates = QAction("Buscar Actualizaciones...", self)
+        self.menu_help = menubar.addMenu(LocalizationManager.get("menu_help"))
+        menu_help = self.menu_help
+
+        self.action_check_updates = QAction(LocalizationManager.get("menu_check_updates"), self)
         self.action_about = QAction(LocalizationManager.get("menu_about"), self)
         
         menu_help.addAction(self.action_check_updates)
@@ -913,17 +919,20 @@ class MainWindow(QMainWindow):
         self.radio_on_network_idle.setChecked(not value)
     
     def update_status(self, message: str):
-        """Actualiza el texto de estado"""
+        """Actualiza el texto de estado y, si el mensaje contiene un patrón
+        HH:MM:SS, sincroniza el mini timer. Si no:
+        - Cuando el timer está corriendo (btn_stop habilitado), NO toca el mini
+          (evita que un mensaje sin hora pise el countdown en curso).
+        - Cuando está detenido, refresca el mini desde los spinners para mostrar
+          el valor configurado, no un residuo.
+        """
         self.lbl_status.setText(message)
-        
-        # En modo compacto, extraemos el tiempo (si existe formato HH:MM:SS)
+
         import re
         time_match = re.search(r'(\d{2}:\d{2}:\d{2})', message)
         if time_match:
             self.lbl_timer_mini.setText(time_match.group(1))
-        else:
-            # Si no hay tiempo en el mensaje, intentamos forzar una actualización desde los spinners
-            # Esto evita que se quede con un tiempo antiguo al resetear
+        elif not self.btn_stop.isEnabled():
             h, m, s = self.get_countdown_time()
             self.lbl_timer_mini.setText(f"{h:02d}:{min(59, m):02d}:{min(59, s):02d}")
     
@@ -1025,6 +1034,13 @@ class MainWindow(QMainWindow):
         self.btn_start.setText(f"▶ {LocalizationManager.get('start')}")
         self.btn_stop.setText(f"⏹ {LocalizationManager.get('stop')}")
         
+        # Títulos de menús de la barra (top-level y submenús)
+        self.menu_file.setTitle(LocalizationManager.get("menu_file"))
+        self.menu_settings.setTitle(LocalizationManager.get("menu_settings"))
+        self.menu_help.setTitle(LocalizationManager.get("menu_help"))
+        self.menu_theme.setTitle(LocalizationManager.get("menu_theme"))
+        self.menu_language.setTitle(LocalizationManager.get("menu_language"))
+
         # Menús (Acciones)
         self.action_start.setText(LocalizationManager.get("menu_start"))
         self.action_stop.setText(LocalizationManager.get("menu_stop"))
@@ -1034,16 +1050,21 @@ class MainWindow(QMainWindow):
         self.action_enable_watchdog.setText(LocalizationManager.get("menu_watchdog"))
         self.action_enable_watchdog.setToolTip(LocalizationManager.get("tooltip_watchdog"))
         self.action_theme_light.setText(LocalizationManager.get("menu_light"))
-
         self.action_theme_dark.setText(LocalizationManager.get("menu_dark"))
+        self.action_theme_nordic.setText(LocalizationManager.get("theme_nordic"))
+        self.action_theme_dracula.setText(LocalizationManager.get("theme_dracula"))
+        self.action_theme_blood.setText(LocalizationManager.get("theme_blood"))
         self.action_theme_high_contrast.setText(LocalizationManager.get("menu_high_contrast"))
-        
+
         self.action_schedule.setText(LocalizationManager.get("menu_schedule"))
         self.action_history.setText(LocalizationManager.get("menu_history"))
         self.action_compact_mode.setText(LocalizationManager.get("menu_compact"))
-        
+
         self.action_lang_english.setText(LocalizationManager.get("menu_english"))
         self.action_lang_spanish.setText(LocalizationManager.get("menu_spanish"))
+        self.action_lang_portuguese.setText(LocalizationManager.get("menu_portuguese"))
+        self.action_lang_french.setText(LocalizationManager.get("menu_french"))
+        self.action_check_updates.setText(LocalizationManager.get("menu_check_updates"))
         self.action_about.setText(LocalizationManager.get("menu_about"))
         
         # Condiciones de monitor
@@ -1125,25 +1146,32 @@ class MainWindow(QMainWindow):
         self.adjustSize()
     
     def _animate_transition(self, change_callback):
-        """Ejecuta una animación de fade-out, llama al callback, y fade-in"""
-        # Fade Out
+        """Ejecuta una animación de fade-out, llama al callback, y fade-in.
+        Si ya hay una animación en curso (alternancia rápida de modo compacto),
+        la detenemos antes de reasignar para evitar slots colgando."""
+        prev = getattr(self, "_fade_anim", None)
+        if prev is not None:
+            try:
+                prev.stop()
+            except Exception:
+                pass
+
         self._fade_anim = QPropertyAnimation(self, b"windowOpacity")
         self._fade_anim.setDuration(200)
         self._fade_anim.setStartValue(1.0)
         self._fade_anim.setEndValue(0.0)
         self._fade_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
-        
+
         def on_fade_out_finished():
             change_callback()
-            # Fade In
+            # Fade In invirtiendo la dirección de la animación.
             self._fade_anim.setDirection(QPropertyAnimation.Direction.Backward)
             self._fade_anim.start()
-            
-            # Desconectar para que no se repita
+
             try:
                 self._fade_anim.finished.disconnect(on_fade_out_finished)
-            except:
+            except (TypeError, RuntimeError):
                 pass
-        
+
         self._fade_anim.finished.connect(on_fade_out_finished)
         self._fade_anim.start()

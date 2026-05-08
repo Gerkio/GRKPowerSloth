@@ -4,6 +4,7 @@ Servicio para gestionar eventos programados (calendario) y el historial.
 """
 
 import json
+import os
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional
@@ -34,10 +35,12 @@ class ScheduleManager(QObject):
         self._events: List[ScheduledEvent] = []
         self._history: List[HistoryEntry] = []
         
-        # Timer para verificar eventos cada minuto
+        # Timer para verificar eventos cada minuto. La ventana de disparo
+        # es [0..60s) hacia el futuro, así que un polling de 60s no pierde eventos
+        # y reduce a la mitad el riesgo de doble disparo respecto a 30s.
         self._check_timer = QTimer(self)
         self._check_timer.timeout.connect(self._check_scheduled_events)
-        self._check_timer.setInterval(30000)  # 30 segundos para mayor precisión
+        self._check_timer.setInterval(60000)
         
         # Cargar datos
         self._ensure_settings_dir()
@@ -63,29 +66,39 @@ class ScheduleManager(QObject):
     def _check_scheduled_events(self):
         """Verifica si hay eventos que deben ejecutarse ahora"""
         now = datetime.now()
-        
+        triggered: List[ScheduledEvent] = []
+
         for event in self._events:
             if not event.enabled:
                 continue
-            
+
             next_run = event.get_next_run()
             if next_run is None:
                 continue
-            
-            # Verificar si el evento debe ejecutarse ahora (con tolerancia de 1 minuto)
+
+            # Ventana de disparo: próximos 60s. Evita el doble disparo que tenía
+            # el código anterior (-30..+30 con polling de 30s).
             time_diff = (next_run - now).total_seconds()
-            if -30 <= time_diff <= 30:  # Dentro de 30 segundos
-                # Verificar que no se haya ejecutado recientemente
+            if 0 <= time_diff <= 60:
+                # Anti-rebote por last_run, robusto frente a cambios de hora del sistema
+                # (abs() en vez de resta sin signo para no permitir disparos cuando
+                # last_run quede en el "futuro" tras un cambio de reloj/DST).
                 if event.last_run:
-                    last_run_dt = datetime.fromisoformat(event.last_run)
-                    if (now - last_run_dt).total_seconds() < 120:  # Menos de 2 minutos
-                        continue
-                
-                # Marcar como ejecutado
+                    try:
+                        last_run_dt = datetime.fromisoformat(event.last_run)
+                        if abs((now - last_run_dt).total_seconds()) < 120:
+                            continue
+                    except ValueError:
+                        pass
+
                 event.last_run = now.isoformat()
-                self._save_events()
-                
-                # Emitir señal
+                triggered.append(event)
+
+        # Persistir una sola vez al final (antes los emit podían disparar
+        # _execute_final_action y reiniciar el sistema antes de cerrar el JSON).
+        if triggered:
+            self._save_events()
+            for event in triggered:
                 self.event_triggered.emit(event)
     
     def get_events(self) -> List[ScheduledEvent]:
@@ -137,10 +150,14 @@ class ScheduleManager(QObject):
             self._events = []
     
     def _save_events(self):
-        """Guarda los eventos en el archivo JSON"""
+        """Guarda los eventos en el archivo JSON con escritura atómica (escribe
+        a un .tmp y hace rename) para que un crash entre escrituras no deje
+        el JSON corrupto."""
         try:
-            with open(self._SCHEDULE_FILE, 'w', encoding='utf-8') as f:
+            tmp = self._SCHEDULE_FILE.with_suffix(self._SCHEDULE_FILE.suffix + '.tmp')
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump([e.to_dict() for e in self._events], f, indent=2, ensure_ascii=False)
+            os.replace(tmp, self._SCHEDULE_FILE)
         except Exception as e:
             print(f"Error saving scheduled events: {e}")
     
@@ -198,13 +215,15 @@ class ScheduleManager(QObject):
             self._history = []
     
     def _save_history(self):
-        """Guarda el historial en el archivo JSON"""
+        """Guarda el historial en el archivo JSON (escritura atómica)."""
         try:
             # Mantener solo las últimas 500 entradas
             if len(self._history) > 500:
                 self._history = sorted(self._history, key=lambda x: x.timestamp, reverse=True)[:500]
-            
-            with open(self._HISTORY_FILE, 'w', encoding='utf-8') as f:
+
+            tmp = self._HISTORY_FILE.with_suffix(self._HISTORY_FILE.suffix + '.tmp')
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump([e.to_dict() for e in self._history], f, indent=2, ensure_ascii=False)
+            os.replace(tmp, self._HISTORY_FILE)
         except Exception as e:
             print(f"Error saving history: {e}")

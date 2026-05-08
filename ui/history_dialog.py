@@ -12,6 +12,7 @@ from PyQt6.QtGui import QFont
 
 from typing import List
 from models.history_entry import HistoryEntry
+from managers.localization_manager import LocalizationManager
 
 
 class HistoryDialog(QDialog):
@@ -28,7 +29,7 @@ class HistoryDialog(QDialog):
     
     def _setup_ui(self):
         """Configura la interfaz del diálogo"""
-        self.setWindowTitle("📋 Historial de Eventos")
+        self.setWindowTitle(LocalizationManager.get("history_dialog_title"))
         self.setMinimumSize(700, 450)
         self.setModal(True)
         
@@ -43,7 +44,7 @@ class HistoryDialog(QDialog):
         
         # Descripción
         desc_label = QLabel("Registro de todas las acciones ejecutadas por la aplicación.")
-        desc_label.setStyleSheet("color: #888888;")
+        desc_label.setObjectName("dialogDescription")
         layout.addWidget(desc_label)
         
         # Tabla
@@ -69,11 +70,11 @@ class HistoryDialog(QDialog):
         btn_layout.addStretch()
         
         if self._on_clear:
-            btn_clear = QPushButton("🗑️ Limpiar Historial")
+            btn_clear = QPushButton(LocalizationManager.get("history_btn_clear"))
             btn_clear.clicked.connect(self._on_clear_clicked)
             btn_layout.addWidget(btn_clear)
-        
-        btn_close = QPushButton("Cerrar")
+
+        btn_close = QPushButton(LocalizationManager.get("dialog_btn_close"))
         btn_close.setDefault(True)
         btn_close.clicked.connect(self.close)
         btn_layout.addWidget(btn_close)

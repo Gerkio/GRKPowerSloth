@@ -3,8 +3,6 @@
 **El programador de apagado definitivo para Windows.**  
 Automatiza el apagado, reinicio o suspensión de tu PC basándose en tiempo o actividad de procesos. Ideal para dejar renderizando, descargando o compilando por la noche.
 
-![GRK PowerSloth UI](https://via.placeholder.com/800x400?text=GRK+PowerSloth+v6.1.0+Mini+Controller)
-
 ## ✨ Novedades en v6.1.0
 *   **🆕 Nuevo Mini-Controlador (Modo Compacto):** Una interfaz minimalista tipo "píldora" con temporizador digital y botones de ajuste rápido.
 *   **⏱️ Ajuste en Tiempo Real:** Suma o resta tiempo (+/- 5 min) directamente desde el modo compacto sin detener el temporizador.

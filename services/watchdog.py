@@ -16,25 +16,30 @@ import time
 import subprocess
 from typing import List
 
+def _is_frozen() -> bool:
+    """True cuando la app corre como EXE empaquetado por PyInstaller."""
+    return getattr(sys, 'frozen', False)
+
 def _script_path() -> str:
-    """Ruta absoluta al script principal (main.py)."""
-    # Este archivo está en services/, subimos un nivel y apuntamos a main.py
+    """Ruta absoluta al script principal (main.py). Solo aplica en modo dev."""
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     return os.path.join(base_dir, "main.py")
 
 def _launch_app(extra_args: List[str] | None = None) -> subprocess.Popen:
     """Lanza la aplicación principal y devuelve el objeto Popen.
 
-    ``extra_args`` permite pasar argumentos adicionales al script (por
-    ejemplo, ``--some-flag``)."""
+    ``extra_args`` permite pasar argumentos adicionales (por ejemplo, ``--some-flag``).
+    En EXE congelado se invoca ``sys.executable`` directamente (la propia app).
+    En modo dev se invoca ``sys.executable main.py``.
+    """
     if extra_args is None:
         extra_args = []
-    python_exe = sys.executable
-    script = _script_path()
-    cmd = [python_exe, script] + extra_args
-    # ``creationflags`` con ``DETACHED_PROCESS`` evita que el sub‑proceso se
-    # cierre cuando la consola principal termina (solo Windows).
-    creationflags = 0x00000008  # DETACHED_PROCESS
+    if _is_frozen():
+        cmd = [sys.executable] + extra_args
+    else:
+        cmd = [sys.executable, _script_path()] + extra_args
+    # DETACHED_PROCESS evita que el sub-proceso se cierre con la consola padre (solo Windows).
+    creationflags = 0x00000008
     return subprocess.Popen(cmd, creationflags=creationflags)
 
 def monitor(restart_delay: float = 1.0, poll_interval: float = 2.0) -> None:

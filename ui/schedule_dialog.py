@@ -13,6 +13,7 @@ from PyQt6.QtGui import QFont
 
 from typing import List, Optional
 from models.scheduled_event import ScheduledEvent, RecurrenceType
+from managers.localization_manager import LocalizationManager
 
 
 class ScheduleEventEditDialog(QDialog):
@@ -113,12 +114,12 @@ class ScheduleEventEditDialog(QDialog):
         # Botones
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        
-        btn_cancel = QPushButton("Cancelar")
+
+        btn_cancel = QPushButton(LocalizationManager.get("dialog_btn_cancel"))
         btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(btn_cancel)
-        
-        btn_save = QPushButton("💾 Guardar")
+
+        btn_save = QPushButton(LocalizationManager.get("dialog_btn_save"))
         btn_save.setDefault(True)
         btn_save.clicked.connect(self._on_save)
         btn_layout.addWidget(btn_save)
@@ -202,7 +203,7 @@ class ScheduleDialog(QDialog):
         self._populate_table()
     
     def _setup_ui(self):
-        self.setWindowTitle("🗓️ Calendario de Eventos Programados")
+        self.setWindowTitle(LocalizationManager.get("schedule_dialog_title"))
         self.setMinimumSize(750, 500)
         self.setModal(True)
         
@@ -217,7 +218,7 @@ class ScheduleDialog(QDialog):
         
         # Descripción
         desc_label = QLabel("Configure apagados y reinicios automáticos recurrentes.")
-        desc_label.setStyleSheet("color: #888888;")
+        desc_label.setObjectName("dialogDescription")
         layout.addWidget(desc_label)
         
         # Barra de herramientas
@@ -265,12 +266,12 @@ class ScheduleDialog(QDialog):
         # Botones inferiores
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        
-        btn_cancel = QPushButton("Cancelar")
+
+        btn_cancel = QPushButton(LocalizationManager.get("dialog_btn_cancel"))
         btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(btn_cancel)
-        
-        btn_save = QPushButton("💾 Guardar Cambios")
+
+        btn_save = QPushButton(LocalizationManager.get("schedule_dialog_save_changes"))
         btn_save.setDefault(True)
         btn_save.clicked.connect(self._on_save_all)
         btn_layout.addWidget(btn_save)

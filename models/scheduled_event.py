@@ -4,9 +4,10 @@ Modelo para eventos programados (calendario de apagados/reinicios).
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import List, Optional
 from enum import Enum
+import calendar
 import uuid
 
 
@@ -122,7 +123,7 @@ class ScheduledEvent:
         elif self.recurrence == RecurrenceType.DAILY:
             target = now.replace(hour=event_hour, minute=event_minute, second=0, microsecond=0)
             if target <= now:
-                target = target.replace(day=target.day + 1)
+                target = target + timedelta(days=1)
             return target
         
         elif self.recurrence == RecurrenceType.WEEKLY:
@@ -139,13 +140,18 @@ class ScheduledEvent:
             return None
         
         elif self.recurrence == RecurrenceType.MONTHLY:
-            target = now.replace(day=self.day_of_month, hour=event_hour, minute=event_minute, second=0, microsecond=0)
+            # Si day_of_month no existe en el mes (ej. 31 en febrero), clampar al último día válido.
+            last_day_now = calendar.monthrange(now.year, now.month)[1]
+            day = min(self.day_of_month, last_day_now)
+            target = now.replace(day=day, hour=event_hour, minute=event_minute, second=0, microsecond=0)
             if target <= now:
-                # Próximo mes
                 if now.month == 12:
-                    target = target.replace(year=now.year + 1, month=1)
+                    year, month = now.year + 1, 1
                 else:
-                    target = target.replace(month=now.month + 1)
+                    year, month = now.year, now.month + 1
+                last_day_next = calendar.monthrange(year, month)[1]
+                day = min(self.day_of_month, last_day_next)
+                target = target.replace(year=year, month=month, day=day)
             return target
         
         return None
@@ -169,6 +175,3 @@ class ScheduledEvent:
             return f"Mensual: día {self.day_of_month}"
         return "Desconocido"
 
-
-# Importar timedelta para get_next_run
-from datetime import timedelta

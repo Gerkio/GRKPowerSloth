@@ -12,10 +12,12 @@ from pathlib import Path
 from typing import Optional, Tuple, Callable
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
 
+from managers.localization_manager import LocalizationManager
+
 # Constantes del Repositorio
 GITHUB_USER = "Gerkio"
 GITHUB_REPO = "GRKPowerSloth"
-CURRENT_VERSION = "6.1.0"  # Sincronizar con localization o main
+CURRENT_VERSION = "6.1.1"  # Sincronizar con main.py app.setApplicationVersion()
 
 class DownloadWorker(QThread):
     """Worker thread para descargar la actualización sin congelar la UI"""
@@ -29,23 +31,42 @@ class DownloadWorker(QThread):
 
     def run(self):
         try:
-            response = requests.get(self.download_url, stream=True)
+            # timeout=(connect, read): un servidor que se queda mudo durante 5 min cancela.
+            response = requests.get(self.download_url, stream=True, timeout=(10, 300))
             response.raise_for_status()
-            
+
             total_size = int(response.headers.get('content-length', 0))
+
+            # Validar espacio en disco antes de escribir (margen del 20%) si el servidor reporta tamaño.
+            if total_size > 0:
+                free = shutil.disk_usage(self.target_path.parent).free
+                required = int(total_size * 1.2)
+                if free < required:
+                    self.finished.emit(False, f"Espacio insuficiente: {free:,} bytes libres, se requieren ~{required:,}.")
+                    return
+
             downloaded = 0
-            
+
             with open(self.target_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
+                    # Si el diálogo padre pide cancelar, abortamos limpio.
+                    if self.isInterruptionRequested():
+                        f.close()
+                        try:
+                            self.target_path.unlink()
+                        except OSError:
+                            pass
+                        self.finished.emit(False, "cancelled")
+                        return
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
                         if total_size > 0:
                             percent = int((downloaded / total_size) * 100)
                             self.progress.emit(percent)
-                            
+
             self.finished.emit(True, str(self.target_path))
-            
+
         except Exception as e:
             self.finished.emit(False, str(e))
 
@@ -67,7 +88,8 @@ class UpdateManager(QObject):
         """
         try:
             logging.info("Buscando actualizaciones en GitHub...")
-            response = requests.get(self.api_url, timeout=5)
+            # 10s es razonable para una API REST con latencia ocasional.
+            response = requests.get(self.api_url, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
@@ -98,12 +120,12 @@ class UpdateManager(QObject):
                     
                     
             if manual_check:
-                self.check_failed.emit("Ya tienes la última versión.")
-                
+                self.check_failed.emit(LocalizationManager.get("update_already_latest"))
+
         except Exception as e:
             logging.error(f"Error checking updates: {e}")
             if manual_check:
-                self.check_failed.emit(f"Error de conexión: {str(e)}")
+                self.check_failed.emit(LocalizationManager.get("update_check_error").format(str(e)))
 
     def download_update(self, url: str, on_progress, on_finished):
         """
@@ -112,11 +134,24 @@ class UpdateManager(QObject):
         """
         current_exe = Path(sys.executable)
         target_path = current_exe.with_name("GRK_PowerSloth.new")
-        
+
         self._download_worker = DownloadWorker(url, target_path)
         self._download_worker.progress.connect(on_progress)
         self._download_worker.finished.connect(lambda success, path: on_finished(success, path))
         self._download_worker.start()
+
+    def cancel_download(self):
+        """Solicita la cancelación del worker de descarga (si está corriendo)
+        y espera a que termine. Pensado para llamarse cuando el diálogo padre
+        se cierra y dejaría al worker huérfano."""
+        worker = self._download_worker
+        if worker is None:
+            return
+        if worker.isRunning():
+            worker.requestInterruption()
+            # Damos hasta 3s al worker para limpiar y emitir 'finished'.
+            worker.wait(3000)
+        self._download_worker = None
 
     def apply_update(self):
         """
@@ -129,16 +164,29 @@ class UpdateManager(QObject):
         
         if not new_file.exists():
             return False
-            
+
+        # CMD interpreta % como prefijo de variable; doblar % en rutas que se incrustan en el bat.
+        # NO escapar %~f0: es una variable real que apunta al propio bat.
+        def _esc(p):
+            return str(p).replace('%', '%%')
+
+        esc_dir = _esc(dir_path)
+        esc_exe = _esc(exe_path)
+        esc_old = _esc(old_file)
+        esc_new = _esc(new_file)
+
         # Script bat temporal para realizar el swap y reiniciar fuera del proceso
-        # Esto es necesario porque Windows bloquea el archivo mientras corre
+        # (Windows bloquea el .exe mientras corre). Si el primer move falla
+        # abortamos; si falla el segundo intentamos revertir el primero para
+        # no dejar al usuario sin ejecutable.
         bat_script = f"""
 @echo off
+cd /d "{esc_dir}"
 timeout /t 1 /nobreak > NUL
-del "{old_file}" 2>NUL
-move "{exe_path}" "{old_file}"
-move "{new_file}" "{exe_path}"
-start "" "{exe_path}"
+del "{esc_old}" 2>NUL
+move "{esc_exe}" "{esc_old}" || exit /b 1
+move "{esc_new}" "{esc_exe}" || (move "{esc_old}" "{esc_exe}" >NUL 2>&1 & exit /b 1)
+start "" "{esc_exe}"
 del "%~f0"
 """
         bat_path = dir_path / "update_runner.bat"
@@ -151,15 +199,12 @@ del "%~f0"
 
     @staticmethod
     def cleanup_old_updates():
-        """Borra archivos .old de actualizaciones previas"""
+        """Borra archivos residuales de actualizaciones previas (.old, .new, runner bat)"""
         try:
             exe_path = Path(sys.executable)
-            old_file = exe_path.with_name("GRK_PowerSloth.old")
-            new_file_trash = exe_path.with_name("GRK_PowerSloth.new")
-            
-            if old_file.exists():
-                old_file.unlink()
-            if new_file_trash.exists():
-                new_file_trash.unlink()
+            for residual in ("GRK_PowerSloth.old", "GRK_PowerSloth.new", "update_runner.bat"):
+                f = exe_path.with_name(residual)
+                if f.exists():
+                    f.unlink()
         except:
             pass
