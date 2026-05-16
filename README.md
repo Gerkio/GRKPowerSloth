@@ -15,11 +15,6 @@ Versión de mantenimiento centrada en **robustez** y **consistencia de UI**. Sin
 
 > Para el detalle completo de los 23 ítems de auditoría aplicados, ver [`CHANGELOG.md`](CHANGELOG.md).
 
-## ✨ Novedades en v6.1.0
-*   **🆕 Nuevo Mini-Controlador (Modo Compacto):** Una interfaz minimalista tipo "píldora" con temporizador digital y botones de ajuste rápido.
-*   **⏱️ Ajuste en Tiempo Real:** Suma o resta tiempo (+/- 5 min) directamente desde el modo compacto sin detener el temporizador.
-*   **🔄 Transiciones Suaves:** Animaciones de fundido al alternar entre el modo completo y compacto.
-
 ## 🚀 Características Principales
 
 *   **⏱️ Modos de Disparo Flexibles:**
