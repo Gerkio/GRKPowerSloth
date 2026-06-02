@@ -146,7 +146,7 @@ def main():
     # Crear aplicación Qt
     app = QApplication(sys.argv)
     app.setApplicationName("GRK PowerSloth")
-    app.setApplicationVersion("6.1.1")  # Definitive Version
+    app.setApplicationVersion("6.1.2")  # Definitive Version
     app.setOrganizationName("Gerkio")
 
     # ===== SINGLETON CHECK (Instancia Única) =====
@@ -194,7 +194,11 @@ def main():
     
     # 2. Crear el Presentador y pasarle la Vista
     presenter = MainPresenter(view)
-    
+
+    # Red de seguridad: la salida desde la bandeja llama a QApplication.quit()
+    # sin disparar closeEvent, así que forzamos el flush de settings diferidos.
+    app.aboutToQuit.connect(presenter._flush_settings)
+
     # 3. Mostrar la Vista
     view.show()
     

@@ -60,10 +60,25 @@ class MainPresenter(QObject):
         # Estado del countdown
         self.countdown_timer = QTimer()
         self.countdown_timer.timeout.connect(self._on_countdown_tick)
+
+        # Guardado diferido: ráfagas de cambios de settings colapsan en una
+        # única escritura a disco. Se hace flush inmediato al cerrar la app.
+        self._save_timer = QTimer()
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(400)
+        self._save_timer.timeout.connect(self._flush_settings)
         
         self.total_seconds = 0
         self.remaining_seconds = 0
         self.is_running = False
+
+        # Caché para evitar trabajo redundante en cada tick del countdown:
+        # el color de la barra solo cambia en 2 umbrales, no cada segundo.
+        self._last_bar_color: Optional[str] = None
+        self._last_title_str: Optional[str] = None
+
+        # Último tema aplicado: un cambio de idioma no debe regenerar el QSS.
+        self._applied_theme: Optional[str] = None
         
         # OTA Updates
         self.update_manager = UpdateManager()
@@ -164,9 +179,11 @@ class MainPresenter(QObject):
         if self.settings.compact_mode:
             self.view.set_compact_mode(True)
         
-        # Si está en modo monitor, cargar lista de procesos
+        # Si está en modo monitor, cargar la lista de procesos de forma diferida:
+        # enumerar ventanas puede bloquear 1-5s, así dejamos pintar la ventana
+        # primero y rellenamos la lista justo después.
         if ScheduleMode(self.settings.last_mode) == ScheduleMode.MONITOR_ACTIVITY:
-            self._populate_process_list()
+            QTimer.singleShot(0, self._populate_process_list)
         
         self._update_ui_state(False)
         self._update_end_time_preview()
@@ -180,7 +197,10 @@ class MainPresenter(QObject):
         
         if not self.is_running:
             self._update_and_save_settings()
-        
+
+        # Forzar escritura de cualquier guardado diferido antes de cerrar.
+        self._flush_settings()
+
         self._deactivate_keep_awake()
         self.process_monitor.stop_monitoring()
         self.schedule_manager.stop_monitoring()
@@ -242,6 +262,8 @@ class MainPresenter(QObject):
             return
         
         self.total_seconds = self.remaining_seconds
+        self._last_bar_color = None
+        self._last_title_str = None
         self.countdown_timer.start(self.TIMER_INTERVAL_MS)
         self._update_ui_state(True)
         self._activate_keep_awake()
@@ -345,16 +367,16 @@ class MainPresenter(QObject):
         """Actualiza la etiqueta de estado con el tiempo restante"""
         action = self.view.get_selected_action()
         action_text = LocalizationManager.get(f"action_{action.name.lower()}")
-        
+
         hours = self.remaining_seconds // 3600
         minutes = (self.remaining_seconds % 3600) // 60
         seconds = self.remaining_seconds % 60
         time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-        
+
+        # Las cadenas de localización usan la convención {0}/{1}; format() las resuelve.
         status = LocalizationManager.get("status_countdown").format(action_text, time_str)
-        # Reemplazar {0} y {1} con los valores
-        status = status.replace("{0}", action_text).replace("{1}", time_str)
-        self.view.update_status(status)
+        # Pasamos time_str ya calculado para que la vista no lo re-extraiga con regex cada tick.
+        self.view.update_status(status, time_str)
         
         if self.total_seconds > 0:
             progress = self.total_seconds - self.remaining_seconds
@@ -366,21 +388,27 @@ class MainPresenter(QObject):
         minutes = (self.remaining_seconds % 3600) // 60
         seconds = self.remaining_seconds % 60
         time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-        
-        self.view.update_window_title(f"[{time_str}] GRK PowerSloth")
-    
+
+        if time_str != self._last_title_str:
+            self._last_title_str = time_str
+            self.view.update_window_title(f"[{time_str}] GRK PowerSloth")
+
     def _update_progress_bar_color(self):
-        """Actualiza el color de la barra de progreso según el tiempo restante"""
+        """Actualiza el color de la barra de progreso según el tiempo restante.
+        El color solo cambia en los umbrales DANGER/WARNING, así que evitamos
+        reaplicar el stylesheet (costoso) cuando el color no ha cambiado."""
         palette = ThemeManager.get_palette(Theme(self.settings.current_theme))
-        
+
         if self.remaining_seconds < self.DANGER_SECONDS:
             color = palette.danger
         elif self.remaining_seconds < self.WARNING_SECONDS:
             color = palette.warning
         else:
             color = palette.accent_primary
-        
-        self.view.set_progress_bar_color(color)
+
+        if color != self._last_bar_color:
+            self._last_bar_color = color
+            self.view.set_progress_bar_color(color)
     
     def _update_end_time_preview(self):
         """Actualiza la vista previa de la hora de finalización"""
@@ -396,11 +424,8 @@ class MainPresenter(QObject):
             total_seconds = self.view.get_countdown_total_seconds()
             if total_seconds > 0:
                 end_time = now + timedelta(seconds=total_seconds)
-                # Formato 12 horas con AM/PM
                 time_fmt = end_time.strftime("%I:%M %p")
                 text = LocalizationManager.get("status_will_run_at").format(time_fmt)
-                # Reemplazar {0}
-                text = text.replace("{0}", time_fmt)
                 self.view.set_end_time(text, True)
             else:
                 self.view.set_end_time("", False)
@@ -494,7 +519,7 @@ class MainPresenter(QObject):
         try:
             SystemIntegration.set_startup(enabled)
             self.settings.start_with_windows = enabled
-            SettingsManager.save(self.settings)
+            self._schedule_save()
         except Exception as e:
             self.view.show_error_message("Error de Permisos", str(e))
             self.view.set_start_with_windows(not enabled)  # Revertir UI
@@ -502,26 +527,33 @@ class MainPresenter(QObject):
     def _on_always_on_top_changed(self, enabled: bool):
         """Handler cuando cambia la opción de siempre visible"""
         self.settings.always_on_top = enabled
-        SettingsManager.save(self.settings)
-    
+        self._schedule_save()
+
     def _on_theme_changed(self, theme: Theme):
         """Handler cuando cambia el tema"""
         self.settings.current_theme = theme.value
         self._apply_theme_and_language()
-        SettingsManager.save(self.settings)
-    
+        self._schedule_save()
+
     def _on_language_changed(self, language: Language):
         """Handler cuando cambia el idioma"""
         self.settings.current_language = language.value
         LocalizationManager.set_language(language)
         self._apply_theme_and_language()
-        SettingsManager.save(self.settings)
+        self._schedule_save()
     
     def _apply_theme_and_language(self):
-        """Aplica el tema y el idioma actual"""
-        palette = ThemeManager.get_palette(Theme(self.settings.current_theme))
-        self.view.apply_theme(palette)
-        
+        """Aplica el tema y el idioma actual.
+
+        El QSS (apply_theme) solo se regenera si el tema cambió realmente; un
+        cambio de idioma reaprovecha el stylesheet ya aplicado. La parte de
+        localización (acciones + textos) sí se refresca siempre."""
+        current_theme = self.settings.current_theme
+        if current_theme != self._applied_theme:
+            palette = ThemeManager.get_palette(Theme(current_theme))
+            self.view.apply_theme(palette)
+            self._applied_theme = current_theme
+
         # Actualizar acciones disponibles con traducciones
         actions = [
             LocalizationManager.get("action_shutdown"),
@@ -560,7 +592,17 @@ class MainPresenter(QObject):
         selected_process = self.view.get_selected_process()
         if selected_process:
             self.settings.last_monitored_process_name = selected_process['name']
-        
+
+        self._schedule_save()
+
+    def _schedule_save(self):
+        """Programa un guardado diferido (reinicia el temporizador). Varias
+        llamadas seguidas colapsan en una sola escritura a disco."""
+        self._save_timer.start()
+
+    def _flush_settings(self):
+        """Escribe los settings ahora y cancela cualquier guardado pendiente."""
+        self._save_timer.stop()
         SettingsManager.save(self.settings)
 
     # ===== OTA UPDATES =====
@@ -588,7 +630,7 @@ class MainPresenter(QObject):
     def _on_watchdog_enabled_changed(self, enabled: bool):
         """Handler cuando se habilita/deshabilita el watchdog"""
         self.settings.watchdog_enabled = enabled
-        SettingsManager.save(self.settings)
+        self._schedule_save()
 
         if enabled:
             self.view.show_notification(
@@ -599,15 +641,10 @@ class MainPresenter(QObject):
     
     def _on_schedule_clicked(self):
         """Muestra el calendario de eventos"""
-        dialog = ScheduleDialog(self.view, self.schedule_manager.get_events(), self.schedule_manager._save_events)
-        # Necesitamos un wrapper para guardar porque ScheduleDialog espera un callback
-        # que reciba la lista, pero ScheduleManager maneja su propia lista interna
-        
         def save_callback(events):
-            # Limpiar y repoblar
             self.schedule_manager._events = events
             self.schedule_manager._save_events()
-            
+
         dialog = ScheduleDialog(self.view, self.schedule_manager.get_events(), save_callback)
         dialog.exec()
     
@@ -620,7 +657,7 @@ class MainPresenter(QObject):
         """Handler cambio modo compacto"""
         self.view.set_compact_mode(enabled)
         self.settings.compact_mode = enabled
-        SettingsManager.save(self.settings)
+        self._schedule_save()
 
     # ===== HANDLERS DE TIEMPO (MODO COMPACTO) =====
     

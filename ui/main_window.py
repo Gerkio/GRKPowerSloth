@@ -7,6 +7,7 @@ Contiene todos los controles de UI y expone eventos (signals) al Presenter.
 """
 
 import os
+import re
 import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -74,7 +75,6 @@ class MainWindow(QMainWindow):
     
     # Updates
     check_updates_clicked = pyqtSignal()
-    show_from_tray_clicked = pyqtSignal()
     exit_from_tray_clicked = pyqtSignal()
     
     # Nuevas funcionalidades
@@ -689,7 +689,7 @@ class MainWindow(QMainWindow):
             
     def _on_action_changed(self, idx: int):
         """Handler cuando cambia la acción seleccionada"""
-        if idx >= 0 and idx < len(PowerAction):
+        if 0 <= idx < len(PowerAction):
             self.action_changed.emit(PowerAction(idx))
         self._update_panel_visibility()
     
@@ -918,17 +918,23 @@ class MainWindow(QMainWindow):
         self.radio_on_exit.setChecked(value)
         self.radio_on_network_idle.setChecked(not value)
     
-    def update_status(self, message: str):
-        """Actualiza el texto de estado y, si el mensaje contiene un patrón
-        HH:MM:SS, sincroniza el mini timer. Si no:
-        - Cuando el timer está corriendo (btn_stop habilitado), NO toca el mini
-          (evita que un mensaje sin hora pise el countdown en curso).
+    def update_status(self, message: str, time_str: str = None):
+        """Actualiza el texto de estado y sincroniza el mini timer.
+
+        - Si el presentador ya conoce la hora (countdown en curso), la pasa por
+          `time_str` y la usamos directamente, evitando una regex por cada tick.
+        - Si no, se extrae del mensaje (HH:MM:SS) como fallback para llamadas
+          externas. Cuando el timer está corriendo (btn_stop habilitado) y el
+          mensaje no trae hora, NO tocamos el mini para no pisar el countdown.
         - Cuando está detenido, refresca el mini desde los spinners para mostrar
           el valor configurado, no un residuo.
         """
         self.lbl_status.setText(message)
 
-        import re
+        if time_str is not None:
+            self.lbl_timer_mini.setText(time_str)
+            return
+
         time_match = re.search(r'(\d{2}:\d{2}:\d{2})', message)
         if time_match:
             self.lbl_timer_mini.setText(time_match.group(1))

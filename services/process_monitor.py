@@ -243,8 +243,8 @@ class ProcessMonitorService(QObject):
                     self.baseline_network_usage /= self.BASELINE_SAMPLES_NEEDED
                     self.baseline_calculated = True
                     self._log(f"📊 Baseline calculado: {self.baseline_network_usage:.2f} bytes/sec")
-                else:
-                    self._log(f"📈 Calculando baseline... ({self.baseline_sample_count}/{self.BASELINE_SAMPLES_NEEDED}) - Actual: {network_usage:.2f} bytes/sec")
+                # No logueamos cada muestra del baseline (eran 15 logs en 30s);
+                # solo el hito final de arriba.
                 return  # No evaluar inactividad durante el período de baseline
             
             # ===== FASE 2: VENTANA DESLIZANTE =====
@@ -343,20 +343,46 @@ class ProcessMonitorService(QObject):
 
 # ===== FUNCIONES AUXILIARES =====
 
-def get_processes_with_windows():
+# Caché con TTL para la enumeración de ventanas: enumerar puede tardar 1-5s con
+# muchas ventanas abiertas y se llama varias veces seguidas (refresh, cambio de
+# modo, arranque). Reutilizamos el resultado dentro de una ventana corta.
+_PROCESS_LIST_TTL_SECONDS = 2.0
+_process_list_cache = None
+_process_list_cache_time = 0.0
+
+
+def get_processes_with_windows(force_refresh: bool = False):
     """
-    Obtiene una lista de procesos que tienen ventanas visibles.
-    
+    Obtiene una lista de procesos que tienen ventanas visibles (con caché TTL).
+
+    Args:
+        force_refresh: si True, ignora la caché y vuelve a enumerar.
+
     Returns:
         List[dict]: Lista de diccionarios con:
             - pid: ID del proceso
             - name: Nombre del proceso
-            - window_title: Título de laventana
+            - window_title: Título de la ventana
             - display_name: Nombre para mostrar en UI
     """
+    global _process_list_cache, _process_list_cache_time
+
+    now = time.time()
+    if (not force_refresh and _process_list_cache is not None
+            and (now - _process_list_cache_time) < _PROCESS_LIST_TTL_SECONDS):
+        return _process_list_cache
+
+    result = _enumerate_processes_with_windows()
+    _process_list_cache = result
+    _process_list_cache_time = now
+    return result
+
+
+def _enumerate_processes_with_windows():
+    """Enumera realmente las ventanas visibles del sistema (trabajo costoso)."""
     import win32gui
     import win32process
-    
+
     processes = []
     seen_pids = set()
     

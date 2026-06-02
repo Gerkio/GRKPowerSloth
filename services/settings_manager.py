@@ -101,12 +101,11 @@ class SettingsManager:
             settings: Configuración a guardar
         """
         cls._ensure_settings_dir()
-        
+
         try:
-            # Sincronizar con el estado real de inicio con Windows
-            from services.system_integration import SystemIntegration
-            settings.start_with_windows = SystemIntegration.is_startup_enabled()
-            
+            # `start_with_windows` lo mantiene sincronizado el presentador en el
+            # handler del toggle; aquí solo persistimos lo recibido (evita una
+            # lectura de registro en cada guardado).
             with open(cls._SETTINGS_FILE, 'w', encoding='utf-8') as f:
                 json.dump(settings.to_dict(), f, indent=2, ensure_ascii=False)
         except Exception as e:

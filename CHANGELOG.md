@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.1.2] - 2026-06-02
+
+Release de rendimiento y fluidez. Sin cambios funcionales ni de interfaz: la app se siente más ligera durante la cuenta atrás, arranca y cambia de idioma sin tirones, y "Buscar actualizaciones" ya no congela la ventana. Todo el trabajo es interno; la configuración se mantiene compatible con versiones anteriores.
+
+### 🚀 Rendimiento y fluidez
+- **Cuenta atrás más ligera**: el color de la barra de progreso solo se reaplica cuando cruza un umbral (≈3 veces en toda la cuenta) en lugar de cada segundo, y se evita el regex de extracción de hora en cada tick. Menos uso de CPU mientras corre el temporizador.
+- **Cambio de tema/idioma sin tirón**: los iconos SVG de los temas se cachean (no se regeneran en base64 en cada cambio) y el stylesheet completo solo se reconstruye cuando el tema cambia de verdad — cambiar de idioma ya no regenera todo el QSS.
+- **Buscar actualizaciones no bloqueante**: la consulta a GitHub se ejecuta en un hilo aparte. La UI ya no se congela hasta 10s con red lenta o sin conexión.
+- **Arranque más fluido en modo monitor**: la enumeración de ventanas (que podía bloquear varios segundos) se difiere para que la ventana se dibuje primero. Además se cachea el resultado durante 2s para refrescos repetidos.
+- **Guardado de ajustes optimizado**: las escrituras de configuración se agrupan (debounce) y ya no se consulta el registro de Windows en cada guardado. Flush garantizado al cerrar la app, también desde la bandeja del sistema.
+
 ## [6.1.1] - 2026-05-07
 
 Maintenance release centrada en robustez, seguridad y consistencia de localización. Sin cambios funcionales mayores: el comportamiento visible al usuario es el mismo, pero la app es más resistente a entornos degradados (rutas con `%`, exe movido, hora del sistema cambiada, descarga interrumpida, etc.) y la UI cambia de idioma sin dejar fragmentos en español.

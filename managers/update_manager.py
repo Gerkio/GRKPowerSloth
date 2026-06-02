@@ -17,7 +17,7 @@ from managers.localization_manager import LocalizationManager
 # Constantes del Repositorio
 GITHUB_USER = "Gerkio"
 GITHUB_REPO = "GRKPowerSloth"
-CURRENT_VERSION = "6.1.1"  # Sincronizar con main.py app.setApplicationVersion()
+CURRENT_VERSION = "6.1.2"  # Sincronizar con main.py app.setApplicationVersion()
 
 class DownloadWorker(QThread):
     """Worker thread para descargar la actualización sin congelar la UI"""
@@ -70,39 +70,40 @@ class DownloadWorker(QThread):
         except Exception as e:
             self.finished.emit(False, str(e))
 
-class UpdateManager(QObject):
-    """
-    Gestiona la comprobación y aplicación de actualizaciones.
-    """
-    update_available = pyqtSignal(str, str, str)  # version, url, changelog
-    check_failed = pyqtSignal(str)
-    
-    def __init__(self):
-        super().__init__()
-        self.api_url = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
-        self._download_worker: Optional[DownloadWorker] = None
+class CheckWorker(QThread):
+    """Worker thread para consultar GitHub sin congelar la UI.
 
-    def check_for_updates(self, manual_check=False):
-        """
-        Consulta la API de GitHub para ver si hay una nueva versión.
-        """
+    Hace la petición de red (potencialmente lenta, hasta 10s de timeout) y el
+    parseo de versión fuera del hilo principal. Emite señales que Qt marshala
+    automáticamente al hilo de la UI.
+    """
+    update_found = pyqtSignal(str, str, str)  # version, url, changelog
+    check_finished = pyqtSignal(str)          # mensaje (solo en manual): al-día o error
+
+    def __init__(self, api_url: str, current_version: str, manual_check: bool):
+        super().__init__()
+        self.api_url = api_url
+        self.current_version = current_version
+        self.manual_check = manual_check
+
+    def run(self):
         try:
             logging.info("Buscando actualizaciones en GitHub...")
             # 10s es razonable para una API REST con latencia ocasional.
             response = requests.get(self.api_url, timeout=10)
-            
+
             if response.status_code == 200:
                 data = response.json()
                 latest_tag = data.get("tag_name", "v0.0.0").lstrip('v')
-                
+
                 # Comparar versiones semánticamente (ej: "6.0.2" -> (6, 0, 2))
                 def parse_v(v_str):
                     return tuple(map(int, (v_str.split('.'))))
 
                 try:
                     latest_tuple = parse_v(latest_tag)
-                    current_tuple = parse_v(CURRENT_VERSION)
-                    
+                    current_tuple = parse_v(self.current_version)
+
                     if latest_tuple > current_tuple:
                         # Encontrar el asset .exe
                         download_url = None
@@ -110,22 +111,52 @@ class UpdateManager(QObject):
                             if asset["name"].endswith(".exe"):
                                 download_url = asset["browser_download_url"]
                                 break
-                        
+
                         if download_url:
                             changelog = data.get("body", "Mejoras de rendimiento y corrección de errores.")
-                            self.update_available.emit(latest_tag, download_url, changelog)
+                            self.update_found.emit(latest_tag, download_url, changelog)
                             return
                 except Exception as ex:
                     logging.error(f"Error parsing versions: {ex}")
-                    
-                    
-            if manual_check:
-                self.check_failed.emit(LocalizationManager.get("update_already_latest"))
+
+            if self.manual_check:
+                self.check_finished.emit(LocalizationManager.get("update_already_latest"))
 
         except Exception as e:
             logging.error(f"Error checking updates: {e}")
-            if manual_check:
-                self.check_failed.emit(LocalizationManager.get("update_check_error").format(str(e)))
+            if self.manual_check:
+                self.check_finished.emit(LocalizationManager.get("update_check_error").format(str(e)))
+
+
+class UpdateManager(QObject):
+    """
+    Gestiona la comprobación y aplicación de actualizaciones.
+    """
+    update_available = pyqtSignal(str, str, str)  # version, url, changelog
+    check_failed = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.api_url = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
+        self._download_worker: Optional[DownloadWorker] = None
+        self._check_worker: Optional[CheckWorker] = None
+
+    def check_for_updates(self, manual_check=False):
+        """
+        Consulta la API de GitHub para ver si hay una nueva versión.
+        El trabajo de red corre en un CheckWorker para no congelar la UI.
+        """
+        # Evitar lanzar dos comprobaciones simultáneas.
+        if self._check_worker is not None and self._check_worker.isRunning():
+            return
+
+        worker = CheckWorker(self.api_url, CURRENT_VERSION, manual_check)
+        # Re-emitimos las señales del worker como propias para que la UI siga
+        # conectada a UpdateManager.update_available / check_failed.
+        worker.update_found.connect(self.update_available)
+        worker.check_finished.connect(self.check_failed)
+        self._check_worker = worker
+        worker.start()
 
     def download_update(self, url: str, on_progress, on_finished):
         """

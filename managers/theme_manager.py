@@ -194,13 +194,25 @@ class ThemeManager:
         else:
             return cls.DARK_THEME
     
-    @staticmethod
-    def _get_arrow_svg(color: str, is_up: bool) -> str:
-        """Genera un data URI para un SVG de flecha con el color especificado."""
+    # Caché de SVGs de flecha: dependen solo de (color, is_up), que forman un
+    # conjunto finito (los colores de las paletas). Evita rehacer el base64 en
+    # cada cambio de tema/idioma.
+    _arrow_svg_cache: Dict[tuple, str] = {}
+
+    @classmethod
+    def _get_arrow_svg(cls, color: str, is_up: bool) -> str:
+        """Genera (y cachea) un data URI para un SVG de flecha con el color dado."""
+        cache_key = (color, is_up)
+        cached = cls._arrow_svg_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         path = "M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z" if is_up else "M7.41,8.59L12,13.17L16.59,8.59L18,10L12,16L6,10L7.41,8.59Z"
         svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="{color}"><path d="{path}"/></svg>'
         encoded = base64.b64encode(svg.encode('utf-8')).decode('ascii')
-        return f"url(data:image/svg+xml;base64,{encoded})"
+        data_uri = f"url(data:image/svg+xml;base64,{encoded})"
+        cls._arrow_svg_cache[cache_key] = data_uri
+        return data_uri
 
     @classmethod
     def apply_theme(cls, widget, palette: ColorPalette, scale_factor: float = 1.0) -> None:
