@@ -5,17 +5,20 @@ Automatiza el apagado, reinicio o suspensión de tu PC basándose en tiempo o ac
 
 ## ✨ Novedades en v6.1.2
 
-Versión de **rendimiento y fluidez** (2 de junio de 2026). Sin cambios funcionales ni de interfaz: la app se siente más ligera y rápida, y la configuración sigue siendo compatible con versiones anteriores.
+Versión de mantenimiento centrada en **robustez** y **consistencia de UI**. Sin cambios funcionales mayores; mismo comportamiento de cara al usuario, pero más resistente y pulida.
 
-*   **🚀 Cuenta atrás más ligera:** El color de la barra de progreso solo se actualiza al cruzar un umbral, no cada segundo. Menos uso de CPU mientras corre el temporizador.
-*   **🎨 Cambio de tema/idioma sin tirones:** Los iconos de los temas se cachean y el estilo completo solo se reconstruye cuando el tema cambia de verdad; cambiar de idioma ya no regenera toda la hoja de estilos.
-*   **🔄 "Buscar actualizaciones" no bloqueante:** La consulta a GitHub corre en segundo plano. La ventana ya no se congela con red lenta o sin conexión.
-*   **⚡ Arranque más fluido:** En modo monitor, la lista de procesos se carga sin retrasar el dibujado de la ventana, con caché breve para refrescos repetidos.
-*   **💾 Guardado de ajustes optimizado:** Las escrituras de configuración se agrupan y se elimina una consulta al registro de Windows en cada guardado, con escritura garantizada al cerrar (también desde la bandeja).
+*   **🌍 Localización al 100%:** Los menús, el aviso de "ya en ejecución" y el diálogo de actualización ahora cambian de idioma sin dejar fragmentos en español. Temas Nordic / Dracula / Blood Moon e idiomas Português / Français se traducen al cambiar idioma.
+*   **🛡️ Calendario más fiable:** Mejor manejo de eventos a fin de mes (día 31 en febrero, etc.), cambios de hora del sistema y DST. Sin doble disparo. Escritura atómica de eventos e historial.
+*   **🔒 OTA más robusto:** Timeout en la descarga, validación de espacio en disco, cancelación limpia desde el botón cerrar, y rollback automático si falla el swap del `.exe`.
+*   **⚙️ Iniciar con Windows:** Si mueves el `.exe` a otra carpeta tras habilitar autostart, la app lo detecta y desactiva la opción en vez de fallar al arrancar Windows.
+*   **🐛 Bugfixes destacados:** Eliminado el bug del countdown que se reescribía con el valor del spinbox; animaciones del modo compacto sin slots colgando al alternar rápido; el `closeEvent` detiene todos los timers correctamente.
 
-> Para el detalle completo, ver [`CHANGELOG.md`](CHANGELOG.md).
+> Para el detalle completo de los 23 ítems de auditoría aplicados, ver [`CHANGELOG.md`](CHANGELOG.md).
 
-
+## ✨ Novedades en v6.1.0
+*   **🆕 Nuevo Mini-Controlador (Modo Compacto):** Una interfaz minimalista tipo "píldora" con temporizador digital y botones de ajuste rápido.
+*   **⏱️ Ajuste en Tiempo Real:** Suma o resta tiempo (+/- 5 min) directamente desde el modo compacto sin detener el temporizador.
+*   **🔄 Transiciones Suaves:** Animaciones de fundido al alternar entre el modo completo y compacto.
 
 ## 🚀 Características Principales
 
