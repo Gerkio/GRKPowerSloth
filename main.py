@@ -12,6 +12,7 @@ NOTA: Esta aplicación REQUIERE privilegios de administrador.
 """
 
 import sys
+import os
 import ctypes
 from pathlib import Path
 
@@ -28,28 +29,29 @@ def is_admin() -> bool:
 
 def run_as_admin():
     """
-    Relanza el script con privilegios de administrador usando UAC.
-    Usa la ruta del Python del entorno virtual para asegurar que las dependencias estén disponibles.
+    Relanza el script o ejecutable con privilegios de administrador usando UAC.
+    En modo ejecutable portable (PyInstaller), relanza el .exe sin pasar rutas temporales
+    y limpiando variables de entorno de extracción temporal.
     """
-    # Ruta del script actual
-    script_path = Path(__file__).resolve()
-    
-    # Ruta del Python del entorno virtual
-    venv_python = script_path.parent / ".venv" / "Scripts" / "python.exe"
-    
-    # Verificar que el venv existe
-    if venv_python.exists():
-        python_exe = str(venv_python)
-    else:
+    if getattr(sys, 'frozen', False):
         python_exe = sys.executable
-    
-    # Parámetros: ruta del script entre comillas (por si hay espacios)
-    params = f'"{script_path}"'
-    
-    # Agregar argumentos adicionales si los hay
-    if len(sys.argv) > 1:
-        extra_args = ' '.join([f'"{arg}"' for arg in sys.argv[1:]])
-        params = f'{params} {extra_args}'
+        # Si es un ejecutable congelado, pasar únicamente los argumentos adicionales de línea de comandos
+        params = ' '.join([f'"{arg}"' for arg in sys.argv[1:]])
+        # Limpiar _MEIPASS2 del entorno para evitar que la nueva instancia
+        # intente reutilizar la carpeta temporal que el proceso saliente eliminará
+        os.environ.pop("_MEIPASS2", None)
+    else:
+        # Modo desarrollo (ejecución directa de script .py)
+        script_path = Path(__file__).resolve()
+        venv_python = script_path.parent / ".venv" / "Scripts" / "python.exe"
+        if venv_python.exists():
+            python_exe = str(venv_python)
+        else:
+            python_exe = sys.executable
+        params = f'"{script_path}"'
+        if len(sys.argv) > 1:
+            extra_args = ' '.join([f'"{arg}"' for arg in sys.argv[1:]])
+            params = f'{params} {extra_args}'
     
     # Ejecutar con elevación UAC
     # ShellExecuteW devuelve un valor > 32 si tiene éxito
