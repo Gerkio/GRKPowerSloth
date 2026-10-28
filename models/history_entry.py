@@ -7,9 +7,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 import uuid
+from managers.localization_manager import LocalizationManager
 
 
-@dataclass
+@dataclass(slots=True)
 class HistoryEntry:
     """
     Representa una entrada en el historial de apagados/reinicios.
@@ -70,19 +71,26 @@ class HistoryEntry:
         )
     
     def get_action_name(self) -> str:
-        """Obtiene el nombre de la acción"""
-        actions = ["Apagar", "Reiniciar", "Suspender", "Reiniciar a UEFI", "Hibernar"]
-        return actions[self.action_type] if 0 <= self.action_type < len(actions) else "Desconocido"
+        """Obtiene el nombre de la acción localizado"""
+        actions = [
+            "action_shutdown", "action_restart", "action_sleep",
+            "action_restart_uefi", "action_hibernate"
+        ]
+        if 0 <= self.action_type < len(actions):
+            return LocalizationManager.get(actions[self.action_type])
+        return LocalizationManager.get("unknown")
     
     def get_trigger_name(self) -> str:
-        """Obtiene el nombre del modo de disparo"""
+        """Obtiene el nombre del modo de disparo localizado"""
         triggers = {
-            "countdown": "Cuenta regresiva",
-            "specific_time": "Hora específica",
-            "monitor": "Monitor de proceso",
-            "scheduled": "Evento programado"
+            "countdown": "mode_countdown",
+            "specific_time": "mode_specific_time",
+            "monitor": "mode_monitor_activity",
+            "scheduled": "trigger_scheduled",
+            "system": "trigger_system"
         }
-        return triggers.get(self.trigger_mode, self.trigger_mode)
+        key = triggers.get(self.trigger_mode)
+        return LocalizationManager.get(key) if key else self.trigger_mode
     
     def get_formatted_timestamp(self) -> str:
         """Obtiene la fecha/hora formateada"""

@@ -4,15 +4,16 @@ Equivalente a AppSettings.cs
 """
 
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 from PyQt6.QtCore import QTime
 from models.enums import Theme, Language, ScheduleMode, PowerAction
 
 
-@dataclass
+@dataclass(slots=True)
 class AppSettings:
     """
     Configuración de la aplicación que se persiste en JSON.
@@ -53,8 +54,10 @@ class AppSettings:
     
     @classmethod
     def from_dict(cls, data: dict):
-        """Crea una instancia desde un diccionario"""
-        return cls(**data)
+        """Crea una instancia desde un diccionario, ignorando claves desconocidas para asegurar escalabilidad."""
+        valid_fields = {f.name for f in fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered)
 
 
 class SettingsManager:
@@ -95,7 +98,7 @@ class SettingsManager:
     @classmethod
     def save(cls, settings: AppSettings) -> None:
         """
-        Guarda la configuración en el archivo JSON.
+        Guarda la configuración en el archivo JSON con escritura atómica.
         
         Args:
             settings: Configuración a guardar
@@ -103,11 +106,10 @@ class SettingsManager:
         cls._ensure_settings_dir()
 
         try:
-            # `start_with_windows` lo mantiene sincronizado el presentador en el
-            # handler del toggle; aquí solo persistimos lo recibido (evita una
-            # lectura de registro en cada guardado).
-            with open(cls._SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            tmp = cls._SETTINGS_FILE.with_suffix(cls._SETTINGS_FILE.suffix + '.tmp')
+            with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(settings.to_dict(), f, indent=2, ensure_ascii=False)
+            os.replace(tmp, cls._SETTINGS_FILE)
         except Exception as e:
             print(f"Error saving settings: {e}")
     

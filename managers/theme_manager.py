@@ -320,13 +320,7 @@ class ThemeManager:
             QRadioButton::indicator:checked {{
                 border: 2px solid {palette.accent_primary};
                 background-color: {palette.accent_primary};
-            }}
-            
-            QRadioButton::indicator:checked::after {{
-                width: 8px;
-                height: 8px;
-                border-radius: 4px;
-                background-color: white;
+                image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOCIgaGVpZ2h0PSIxOCIgdmlld0JveD0iMCAwIDE4IDE4Ij48Y2lyY2xlIGN4PSI5IiBjeT0iOSIgcj0iNCIgZmlsbD0id2hpdGUiLz48L3N2Zz4=);
             }}
             
             /* ===== CHECKBOXES - Modernos ===== */

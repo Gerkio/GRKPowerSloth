@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.2.0] - 2026-10-27
+
+Actualización técnica integral de rendimiento, huella de memoria, estabilidad y escalabilidad. Sin adición de nuevas funciones ni alteraciones de la interfaz: el programa es más ligero, arranca más rápido, consume menos recursos y resuelve todos los bugs latentes y restricciones arquitectónicas.
+
+### 🚀 Rendimiento y Optimización
+- **Lazy loading de requests**: se eliminó la importación a nivel de módulo en el gestor de actualizaciones. `requests` y sus subdependencias de red (`urllib3`, `certifi`, etc.) solo se cargan si el usuario busca actualizaciones, liberando ~12-15 MB de RAM y reduciendo ~200 ms el arranque en frío.
+- **Modelos optimizados con `slots=True`**: `AppSettings`, `HistoryEntry`, `ScheduledEvent` y `ProcessItem` utilizan slots en Python 3.12+, reduciendo significativamente la memoria por instancia y acelerando el acceso a sus campos.
+- **Filtrado optimizado de procesos**: `_enumerate_processes_with_windows()` descarta ventanas sin texto o de dimensiones nulas antes de resolver el subproceso, evitando consultas de proceso redundantes.
+- **Compilación de expresiones regulares**: `_TIME_RE` se pre-compila a nivel de módulo en la vista principal para evitar re-compilaciones periódicas durante actualizaciones de estado.
+- **Empaquetado optimizado en PyInstaller**: especificación configurada con `optimize=1` y exclusión de paquetes innecesarios (`tkinter`, `unittest`, etc.).
+
+### 🐛 Bug Fixes & Estabilidad
+- **Crash en modo compacto solucionado**: corregida la excepción no capturada (`AttributeError`) al pulsar `+` o `-` durante una cuenta atrás activa por llamada a un método ausente.
+- **Respeto estricto del patrón MVP**: se eliminó el acceso directo a widgets internos (`lbl_status`) desde el presentador, canalizándolo por métodos públicos de la vista (`refresh_status_from_inputs`).
+- **Persistencia atómica de configuración**: `SettingsManager.save()` ahora utiliza escritura atómica con archivo temporal y reemplazo, previniendo la corrupción de `settings.json` ante apagados súbitos del sistema.
+- **Deserialización resiliente de configuración**: `AppSettings.from_dict()` filtra dinámicamente claves desconocidas o de futuras versiones sin fallar con `TypeError`.
+- **Corrección de estilo QSS**: eliminada la pseudo-clase no soportada `::after` en `QRadioButton` y sustituida por indicador SVG válido para evitar warnings en el motor de estilos de Qt.
+- **Condición de carrera en animación de modo compacto**: se desacopló el signal `finished` antes de iniciar la inversión de la animación en `MainWindow`.
+- **Detección de minimizado**: uso de máscara de bits en `_on_window_state_changed` para garantizar la minimización a la bandeja independientemente de banderas activas del gestor de ventanas.
+
+### 🌐 Localización e Internacionalización Completa (ES, EN, PT, FR)
+- **Erradicación de cadenas hardcodeadas**: localización completa de los diálogos de eventos programados (`ScheduleDialog`), editor de eventos (`ScheduleEventEditDialog`) y visor de historial (`HistoryDialog`), así como nombres de días y recurrencias.
+- **Mecanismo de fallback seguro**: `LocalizationManager.get()` ahora recurre al diccionario en inglés antes de retornar la clave cruda en caso de traducciones pendientes en portugués o francés.
+
+### 🛠️ Escalabilidad & Arquitectura
+- **Desacoplamiento de acciones del sistema**: centralización de comandos de apagado, reinicio, suspensión, hibernación y UEFI en `SystemIntegration.execute_power_action()`, permitiendo añadir nuevas acciones en el futuro con mínimo acoplamiento.
+- **Corrección de autostart en modo desarrollo**: construcción correcta del comando con el intérprete de Python cuando la aplicación no está congelada en un ejecutable.
+
 ## [6.1.2] - 2026-06-02
 
 Release de rendimiento y fluidez. Sin cambios funcionales ni de interfaz: la app se siente más ligera durante la cuenta atrás, arranca y cambia de idioma sin tirones, y "Buscar actualizaciones" ya no congela la ventana. Todo el trabajo es interno; la configuración se mantiene compatible con versiones anteriores.

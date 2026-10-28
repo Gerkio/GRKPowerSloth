@@ -9,6 +9,8 @@ Contiene todos los controles de UI y expone eventos (signals) al Presenter.
 import os
 import re
 import sys
+
+_TIME_RE = re.compile(r'(\d{2}:\d{2}:\d{2})')
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QRadioButton, QCheckBox, QGroupBox,
@@ -918,6 +920,10 @@ class MainWindow(QMainWindow):
         self.radio_on_exit.setChecked(value)
         self.radio_on_network_idle.setChecked(not value)
     
+    def refresh_status_from_inputs(self):
+        """Refresca la etiqueta de estado y el temporizador compacto desde la configuración actual."""
+        self.update_status(self.lbl_status.text())
+
     def update_status(self, message: str, time_str: str = None):
         """Actualiza el texto de estado y sincroniza el mini timer.
 
@@ -935,7 +941,7 @@ class MainWindow(QMainWindow):
             self.lbl_timer_mini.setText(time_str)
             return
 
-        time_match = re.search(r'(\d{2}:\d{2}:\d{2})', message)
+        time_match = _TIME_RE.search(message)
         if time_match:
             self.lbl_timer_mini.setText(time_match.group(1))
         elif not self.btn_stop.isEnabled():
@@ -1169,15 +1175,15 @@ class MainWindow(QMainWindow):
         self._fade_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
 
         def on_fade_out_finished():
-            change_callback()
-            # Fade In invirtiendo la dirección de la animación.
-            self._fade_anim.setDirection(QPropertyAnimation.Direction.Backward)
-            self._fade_anim.start()
-
             try:
                 self._fade_anim.finished.disconnect(on_fade_out_finished)
             except (TypeError, RuntimeError):
                 pass
+
+            change_callback()
+            # Fade In invirtiendo la dirección de la animación.
+            self._fade_anim.setDirection(QPropertyAnimation.Direction.Backward)
+            self._fade_anim.start()
 
         self._fade_anim.finished.connect(on_fade_out_finished)
         self._fade_anim.start()

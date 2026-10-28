@@ -32,17 +32,21 @@ class AboutDialog(QDialog):
         header_layout = QHBoxLayout()
         
         # Icono de la aplicación (usando QIcon para ICO multitamaño)
-        from pathlib import Path
         from PyQt6.QtGui import QIcon
         from PyQt6.QtCore import QSize
         
-        icon_path = Path(__file__).parent.parent / "app_icon.ico"
-        
         lbl_icon = QLabel()
-        if icon_path.exists():
-            # QIcon selecciona automáticamente el mejor tamaño del ICO
-            app_icon = QIcon(str(icon_path))
-            # Obtener pixmap a 64px - QIcon elegirá la mejor resolución disponible
+        app_icon = None
+        if self.parent() and hasattr(self.parent(), "get_app_icon"):
+            app_icon = self.parent().get_app_icon()
+        if not app_icon or app_icon.isNull():
+            from pathlib import Path
+            icon_path = Path(__file__).parent.parent / "app_icon.ico"
+            if icon_path.exists():
+                app_icon = QIcon(str(icon_path))
+        
+        if app_icon and not app_icon.isNull():
+            self.setWindowIcon(app_icon)
             icon_pixmap = app_icon.pixmap(QSize(64, 64))
             lbl_icon.setPixmap(icon_pixmap)
             lbl_icon.setFixedSize(72, 72)

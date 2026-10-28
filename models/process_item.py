@@ -6,7 +6,7 @@ Equivalente a ProcessItem.cs
 from dataclasses import dataclass
 
 
-@dataclass
+@dataclass(slots=True)
 class ProcessItem:
     """
     Clase de datos para representar un proceso de forma legible en la UI.

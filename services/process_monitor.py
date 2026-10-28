@@ -379,34 +379,45 @@ def get_processes_with_windows(force_refresh: bool = False):
 
 
 def _enumerate_processes_with_windows():
-    """Enumera realmente las ventanas visibles del sistema (trabajo costoso)."""
+    """Enumera realmente las ventanas visibles del sistema de forma optimizada."""
     import win32gui
     import win32process
 
     processes = []
-    seen_pids = set()
+    seen_pids = {0, 4}  # Omitir System Idle y System
     
     def enum_windows_callback(hwnd, _):
-        """Callback para enumerar ventanas"""
+        """Callback para enumerar ventanas con filtrado temprano"""
         if win32gui.IsWindowVisible(hwnd):
-            window_text = win32gui.GetWindowText(hwnd)
-            if window_text:  # Solo ventanas con título
-                _, pid = win32process.GetWindowThreadProcessId(hwnd)
-                if pid not in seen_pids:
-                    try:
-                        proc = psutil.Process(pid)
-                        processes.append({
-                            'pid': pid,
-                            'name': proc.name(),
-                            'window_title': window_text,
-                            'display_name': f"{proc.name()} ({window_text})"
-                        })
-                        seen_pids.add(pid)
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        pass  # Ignorar procesos inaccesibles
+            window_text = win32gui.GetWindowText(hwnd).strip()
+            if not window_text:
+                return
+
+            # Omitir ventanas de tamaño cero / invisibles en pantalla
+            try:
+                rect = win32gui.GetWindowRect(hwnd)
+                if (rect[2] - rect[0] <= 0) or (rect[3] - rect[1] <= 0):
+                    return
+            except Exception:
+                return
+
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            if pid not in seen_pids:
+                try:
+                    proc = psutil.Process(pid)
+                    proc_name = proc.name()
+                    processes.append({
+                        'pid': pid,
+                        'name': proc_name,
+                        'window_title': window_text,
+                        'display_name': f"{proc_name} ({window_text})"
+                    })
+                    seen_pids.add(pid)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass  # Ignorar procesos inaccesibles o terminados
     
     # Enumerar todas las ventanas
     win32gui.EnumWindows(enum_windows_callback, None)
     
     # Ordenar por display_name
-    return sorted(processes, key=lambda x: x['display_name'])
+    return sorted(processes, key=lambda x: x['display_name'].lower())

@@ -27,7 +27,8 @@ class ScheduleEventEditDialog(QDialog):
         self._load_event_data()
     
     def _setup_ui(self):
-        self.setWindowTitle("🗓️ " + ("Nuevo Evento" if self._is_new else "Editar Evento"))
+        title_text = LocalizationManager.get("schedule_edit_title_new") if self._is_new else LocalizationManager.get("schedule_edit_title_edit")
+        self.setWindowTitle(f"🗓️ {title_text}")
         self.setMinimumWidth(450)
         self.setModal(True)
         
@@ -37,24 +38,30 @@ class ScheduleEventEditDialog(QDialog):
         
         # Nombre del evento
         name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("Nombre:"))
+        name_layout.addWidget(QLabel(LocalizationManager.get("schedule_field_name")))
         self.txt_name = QLineEdit()
-        self.txt_name.setPlaceholderText("Ej: Apagar cada noche")
+        self.txt_name.setPlaceholderText(LocalizationManager.get("schedule_placeholder_name"))
         name_layout.addWidget(self.txt_name)
         layout.addLayout(name_layout)
         
         # Acción
         action_layout = QHBoxLayout()
-        action_layout.addWidget(QLabel("Acción:"))
+        action_layout.addWidget(QLabel(LocalizationManager.get("schedule_field_action")))
         self.cmb_action = QComboBox()
-        self.cmb_action.addItems(["Apagar", "Reiniciar", "Suspender", "Reiniciar a UEFI", "Hibernar"])
+        self.cmb_action.addItems([
+            LocalizationManager.get("action_shutdown"),
+            LocalizationManager.get("action_restart"),
+            LocalizationManager.get("action_sleep"),
+            LocalizationManager.get("action_restart_uefi"),
+            LocalizationManager.get("action_hibernate")
+        ])
         action_layout.addWidget(self.cmb_action)
         action_layout.addStretch()
         layout.addLayout(action_layout)
         
         # Hora
         time_layout = QHBoxLayout()
-        time_layout.addWidget(QLabel("Hora:"))
+        time_layout.addWidget(QLabel(LocalizationManager.get("schedule_field_time")))
         self.time_edit = QTimeEdit()
         self.time_edit.setDisplayFormat("HH:mm")
         time_layout.addWidget(self.time_edit)
@@ -62,11 +69,16 @@ class ScheduleEventEditDialog(QDialog):
         layout.addLayout(time_layout)
         
         # Recurrencia
-        recurrence_group = QGroupBox("Recurrencia")
+        recurrence_group = QGroupBox(LocalizationManager.get("schedule_group_recurrence"))
         recurrence_layout = QVBoxLayout(recurrence_group)
         
         self.cmb_recurrence = QComboBox()
-        self.cmb_recurrence.addItems(["Una sola vez", "Todos los días", "Días específicos", "Mensual"])
+        self.cmb_recurrence.addItems([
+            LocalizationManager.get("recurrence_once"),
+            LocalizationManager.get("recurrence_daily"),
+            LocalizationManager.get("recurrence_weekly"),
+            LocalizationManager.get("recurrence_monthly")
+        ])
         self.cmb_recurrence.currentIndexChanged.connect(self._on_recurrence_changed)
         recurrence_layout.addWidget(self.cmb_recurrence)
         
@@ -74,7 +86,7 @@ class ScheduleEventEditDialog(QDialog):
         self.date_widget = QWidget()
         date_layout = QHBoxLayout(self.date_widget)
         date_layout.setContentsMargins(0, 10, 0, 0)
-        date_layout.addWidget(QLabel("Fecha:"))
+        date_layout.addWidget(QLabel(LocalizationManager.get("schedule_field_date")))
         self.date_edit = QDateEdit()
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setDate(QDate.currentDate())
@@ -87,8 +99,8 @@ class ScheduleEventEditDialog(QDialog):
         days_layout = QHBoxLayout(self.days_widget)
         days_layout.setContentsMargins(0, 10, 0, 0)
         self.day_checks = []
-        day_names = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-        for i, name in enumerate(day_names):
+        for i in range(7):
+            name = LocalizationManager.get(f"day_short_{i}")
             chk = QCheckBox(name)
             self.day_checks.append(chk)
             days_layout.addWidget(chk)
@@ -98,7 +110,7 @@ class ScheduleEventEditDialog(QDialog):
         self.monthly_widget = QWidget()
         monthly_layout = QHBoxLayout(self.monthly_widget)
         monthly_layout.setContentsMargins(0, 10, 0, 0)
-        monthly_layout.addWidget(QLabel("Día del mes:"))
+        monthly_layout.addWidget(QLabel(LocalizationManager.get("schedule_field_day_of_month")))
         self.spin_day = QSpinBox()
         self.spin_day.setRange(1, 31)
         monthly_layout.addWidget(self.spin_day)
@@ -108,7 +120,7 @@ class ScheduleEventEditDialog(QDialog):
         layout.addWidget(recurrence_group)
         
         # Forzar cierre
-        self.chk_force = QCheckBox("Forzar cierre de aplicaciones")
+        self.chk_force = QCheckBox(LocalizationManager.get("schedule_chk_force"))
         layout.addWidget(self.chk_force)
         
         # Botones
@@ -168,7 +180,7 @@ class ScheduleEventEditDialog(QDialog):
         """Guarda el evento"""
         name = self.txt_name.text().strip()
         if not name:
-            QMessageBox.warning(self, "Error", "Por favor, ingrese un nombre para el evento.")
+            QMessageBox.warning(self, LocalizationManager.get("update_dlg_error_title"), LocalizationManager.get("schedule_error_name_empty"))
             return
         
         self._event.name = name
@@ -212,35 +224,30 @@ class ScheduleDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         
         # Título
-        title_label = QLabel("Eventos Programados")
+        title_label = QLabel(LocalizationManager.get("schedule_dialog_title").replace("🗓️ ", ""))
         title_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
         layout.addWidget(title_label)
-        
-        # Descripción
-        desc_label = QLabel("Configure apagados y reinicios automáticos recurrentes.")
-        desc_label.setObjectName("dialogDescription")
-        layout.addWidget(desc_label)
         
         # Barra de herramientas
         toolbar = QHBoxLayout()
         
-        btn_add = QPushButton("➕ Nuevo Evento")
+        btn_add = QPushButton(LocalizationManager.get("schedule_btn_add"))
         btn_add.clicked.connect(self._on_add_event)
         toolbar.addWidget(btn_add)
         
-        self.btn_edit = QPushButton("✏️ Editar")
+        self.btn_edit = QPushButton(LocalizationManager.get("schedule_btn_edit"))
         self.btn_edit.clicked.connect(self._on_edit_event)
         self.btn_edit.setEnabled(False)
         toolbar.addWidget(self.btn_edit)
         
-        self.btn_delete = QPushButton("🗑️ Eliminar")
+        self.btn_delete = QPushButton(LocalizationManager.get("schedule_btn_delete"))
         self.btn_delete.clicked.connect(self._on_delete_event)
         self.btn_delete.setEnabled(False)
         toolbar.addWidget(self.btn_delete)
         
         toolbar.addStretch()
         
-        self.btn_toggle = QPushButton("⏸️ Deshabilitar")
+        self.btn_toggle = QPushButton("⏸️ " + LocalizationManager.get("schedule_status_disabled"))
         self.btn_toggle.clicked.connect(self._on_toggle_event)
         self.btn_toggle.setEnabled(False)
         toolbar.addWidget(self.btn_toggle)
@@ -251,7 +258,12 @@ class ScheduleDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels([
-            "Activo", "Nombre", "Acción", "Hora", "Recurrencia", "Próxima Ejecución"
+            LocalizationManager.get("schedule_col_status"),
+            LocalizationManager.get("schedule_col_name"),
+            LocalizationManager.get("schedule_col_action"),
+            LocalizationManager.get("schedule_col_time"),
+            LocalizationManager.get("schedule_col_recurrence"),
+            LocalizationManager.get("schedule_col_next_run")
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
@@ -316,7 +328,9 @@ class ScheduleDialog(QDialog):
             row = self.table.currentRow()
             if 0 <= row < len(self._events):
                 event = self._events[row]
-                self.btn_toggle.setText("⏸️ Deshabilitar" if event.enabled else "▶️ Habilitar")
+                toggle_text = LocalizationManager.get("schedule_status_disabled") if event.enabled else LocalizationManager.get("schedule_status_active")
+                prefix = "⏸️ " if event.enabled else "▶️ "
+                self.btn_toggle.setText(prefix + toggle_text)
     
     def _on_add_event(self):
         """Añade un nuevo evento"""
@@ -339,10 +353,11 @@ class ScheduleDialog(QDialog):
         row = self.table.currentRow()
         if 0 <= row < len(self._events):
             event = self._events[row]
+            confirm_msg = f"{LocalizationManager.get('schedule_confirm_delete_msg')}\n\n({event.name})"
             reply = QMessageBox.question(
                 self,
-                "Confirmar eliminación",
-                f"¿Está seguro de que desea eliminar el evento '{event.name}'?",
+                LocalizationManager.get("schedule_confirm_delete_title"),
+                confirm_msg,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.Yes:

@@ -1,17 +1,15 @@
-"""
-Gestor de integración con el sistema Windows.
-Equivalente a SystemIntegrationManager.cs
-"""
-
 import sys
 import winreg
+import ctypes
+import subprocess
 from pathlib import Path
+from models.enums import PowerAction
 
 
 class SystemIntegration:
     """
     Gestor estático para la integración con Windows.
-    Maneja el inicio automático con el sistema.
+    Maneja el inicio automático con el sistema y la ejecución de acciones de energía.
     """
     
     _APP_NAME = "GRKPowerSloth"
@@ -36,13 +34,13 @@ class SystemIntegration:
                 winreg.KEY_SET_VALUE
             ) as key:
                 if enabled:
-                    exe_path = cls._get_executable_path()
+                    cmd_str = cls._get_startup_command()
                     winreg.SetValueEx(
                         key,
                         cls._APP_NAME,
                         0,
                         winreg.REG_SZ,
-                        f'"{exe_path}"'
+                        cmd_str
                     )
                 else:
                     try:
@@ -57,8 +55,7 @@ class SystemIntegration:
         """
         Verifica si la aplicación está configurada para iniciar con Windows.
         Considera "no habilitado" si la entrada existe pero el ejecutable
-        registrado ya no existe en disco (caso típico: el usuario movió la app
-        a otra carpeta tras habilitar autostart).
+        registrado ya no existe en disco.
 
         Returns:
             True si está habilitado y la ruta apunta a un ejecutable existente.
@@ -75,28 +72,49 @@ class SystemIntegration:
                 except FileNotFoundError:
                     return False
 
-                # El valor está entrecomillado (ej. '"C:\\path\\app.exe"');
-                # quitar comillas externas y verificar que exista.
-                exe_path = value.strip().strip('"')
-                if not exe_path:
+                # Puede ser f'"{exe}"' o f'"{python}" "{script}"'
+                clean_val = value.strip()
+                if clean_val.startswith('"'):
+                    first_path = clean_val[1:].split('"', 1)[0]
+                else:
+                    first_path = clean_val.split(' ', 1)[0]
+
+                if not first_path:
                     return False
-                return Path(exe_path).exists()
+                return Path(first_path).exists()
         except Exception:
             return False
     
     @classmethod
-    def _get_executable_path(cls) -> str:
+    def _get_startup_command(cls) -> str:
         """
-        Obtiene la ruta del ejecutable actual.
-        
-        Returns:
-            Ruta completa al ejecutable
+        Obtiene el comando completo de inicio automático para registrar en Windows Run.
         """
-        # Si está ejecutándose como script de Python
         if getattr(sys, 'frozen', False):
-            # Running as compiled executable
-            return sys.executable
+            # En EXE congelado, invocar el ejecutable
+            return f'"{sys.executable}"'
         else:
-            # Running as Python script
-            # Retornar el script principal
-            return str(Path(sys.argv[0]).resolve())
+            # En script de Python, invocar python + script principal
+            script_path = Path(sys.argv[0]).resolve()
+            return f'"{sys.executable}" "{script_path}"'
+    
+    @classmethod
+    def execute_power_action(cls, action: PowerAction, force_close: bool = False) -> None:
+        """
+        Ejecuta la acción del sistema (shutdown, restart, sleep, uefi, hibernate).
+        Desacopla la lógica de ejecución del Presenter para facilitar la extensibilidad.
+        """
+        force_args = ["/f"] if force_close else []
+
+        if action == PowerAction.SHUTDOWN:
+            subprocess.run(["shutdown", "/s", *force_args, "/t", "0"], shell=False)
+        elif action == PowerAction.RESTART:
+            subprocess.run(["shutdown", "/r", *force_args, "/t", "0"], shell=False)
+        elif action == PowerAction.RESTART_UEFI:
+            subprocess.run(["shutdown", "/r", "/fw", *force_args, "/t", "0"], shell=False)
+        elif action == PowerAction.HIBERNATE:
+            subprocess.run(["shutdown", "/h"], shell=False)
+        elif action == PowerAction.SLEEP:
+            ctypes.windll.powrprof.SetSuspendState(0, 1, 0)
+        else:
+            raise ValueError(f"Acción no soportada: {action}")

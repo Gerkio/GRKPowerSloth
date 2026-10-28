@@ -38,12 +38,12 @@ class HistoryDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         
         # Título
-        title_label = QLabel("Historial de Apagados/Reinicios")
+        title_label = QLabel(LocalizationManager.get("history_title"))
         title_label.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
         layout.addWidget(title_label)
         
         # Descripción
-        desc_label = QLabel("Registro de todas las acciones ejecutadas por la aplicación.")
+        desc_label = QLabel(LocalizationManager.get("history_description"))
         desc_label.setObjectName("dialogDescription")
         layout.addWidget(desc_label)
         
@@ -51,7 +51,11 @@ class HistoryDialog(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels([
-            "Fecha/Hora", "Acción", "Modo", "Proceso", "Estado"
+            LocalizationManager.get("history_col_datetime"),
+            LocalizationManager.get("history_col_action"),
+            LocalizationManager.get("history_col_mode"),
+            LocalizationManager.get("history_col_process"),
+            LocalizationManager.get("history_col_status")
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
@@ -102,19 +106,20 @@ class HistoryDialog(QDialog):
             
             # Estado
             if entry.completed:
-                status_item = QTableWidgetItem("✅ Completado")
+                status_item = QTableWidgetItem(LocalizationManager.get("history_status_completed"))
             else:
-                status_item = QTableWidgetItem(f"❌ {entry.error_message or 'Error'}")
+                err_text = entry.error_message or LocalizationManager.get("update_dlg_error_title")
+                status_item = QTableWidgetItem(LocalizationManager.get("history_status_error").format(err_text))
             self.table.setItem(row, 4, status_item)
         
-        self.count_label.setText(f"Total: {len(self._entries)} eventos registrados")
+        self.count_label.setText(LocalizationManager.get("history_total_count").format(len(self._entries)))
     
     def _on_clear_clicked(self):
         """Handler para limpiar el historial"""
         reply = QMessageBox.question(
             self,
-            "Confirmar",
-            "¿Está seguro de que desea eliminar todo el historial?\n\nEsta acción no se puede deshacer.",
+            LocalizationManager.get("history_confirm_clear_title"),
+            LocalizationManager.get("history_confirm_clear_msg"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         
@@ -123,4 +128,8 @@ class HistoryDialog(QDialog):
                 self._on_clear()
             self._entries = []
             self._populate_table()
-            QMessageBox.information(self, "Historial", "El historial ha sido eliminado.")
+            QMessageBox.information(
+                self,
+                LocalizationManager.get("history_title"),
+                LocalizationManager.get("history_cleared_msg")
+            )

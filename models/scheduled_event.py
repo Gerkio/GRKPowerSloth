@@ -9,6 +9,7 @@ from typing import List, Optional
 from enum import Enum
 import calendar
 import uuid
+from managers.localization_manager import LocalizationManager
 
 
 class DayOfWeek(Enum):
@@ -30,7 +31,7 @@ class RecurrenceType(Enum):
     MONTHLY = "monthly"     # Día específico del mes
 
 
-@dataclass
+@dataclass(slots=True)
 class ScheduledEvent:
     """
     Representa un evento programado de apagado/reinicio.
@@ -157,21 +158,27 @@ class ScheduledEvent:
         return None
     
     def get_action_name(self) -> str:
-        """Obtiene el nombre de la acción"""
-        actions = ["Apagar", "Reiniciar", "Suspender", "Reiniciar a UEFI", "Hibernar"]
-        return actions[self.action_type] if 0 <= self.action_type < len(actions) else "Desconocido"
+        """Obtiene el nombre de la acción localizado"""
+        actions = [
+            "action_shutdown", "action_restart", "action_sleep",
+            "action_restart_uefi", "action_hibernate"
+        ]
+        if 0 <= self.action_type < len(actions):
+            return LocalizationManager.get(actions[self.action_type])
+        return LocalizationManager.get("unknown")
     
     def get_recurrence_description(self) -> str:
-        """Obtiene una descripción legible de la recurrencia"""
+        """Obtiene una descripción legible y localizada de la recurrencia"""
         if self.recurrence == RecurrenceType.ONCE:
-            return f"Una vez ({self.specific_date or 'sin fecha'})"
+            date_str = self.specific_date or LocalizationManager.get("recurrence_no_date")
+            return LocalizationManager.get("recurrence_once_fmt").format(date_str)
         elif self.recurrence == RecurrenceType.DAILY:
-            return "Todos los días"
+            return LocalizationManager.get("recurrence_daily")
         elif self.recurrence == RecurrenceType.WEEKLY:
-            day_names = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-            days = [day_names[d] for d in sorted(self.days_of_week)]
-            return f"Semanal: {', '.join(days)}"
+            day_names = [LocalizationManager.get(f"day_short_{d}") for d in range(7)]
+            days = [day_names[d] for d in sorted(self.days_of_week) if 0 <= d < 7]
+            return LocalizationManager.get("recurrence_weekly_fmt").format(", ".join(days))
         elif self.recurrence == RecurrenceType.MONTHLY:
-            return f"Mensual: día {self.day_of_month}"
-        return "Desconocido"
+            return LocalizationManager.get("recurrence_monthly_fmt").format(self.day_of_month)
+        return LocalizationManager.get("unknown")
 

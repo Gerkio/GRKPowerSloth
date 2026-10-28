@@ -1,12 +1,8 @@
-"""
-Gestor de Actualizaciones Automáticas (OTA) via GitHub Releases.
-"""
-
 import os
 import sys
+import re
 import shutil
 import logging
-import requests
 import subprocess
 from pathlib import Path
 from typing import Optional, Tuple, Callable
@@ -17,7 +13,7 @@ from managers.localization_manager import LocalizationManager
 # Constantes del Repositorio
 GITHUB_USER = "Gerkio"
 GITHUB_REPO = "GRKPowerSloth"
-CURRENT_VERSION = "6.1.2"  # Sincronizar con main.py app.setApplicationVersion()
+CURRENT_VERSION = "6.2.0"  # Sincronizar con main.py app.setApplicationVersion()
 
 class DownloadWorker(QThread):
     """Worker thread para descargar la actualización sin congelar la UI"""
@@ -31,6 +27,9 @@ class DownloadWorker(QThread):
 
     def run(self):
         try:
+            # Lazy import de requests para minimizar huella de memoria al inicio
+            import requests
+
             # timeout=(connect, read): un servidor que se queda mudo durante 5 min cancela.
             response = requests.get(self.download_url, stream=True, timeout=(10, 300))
             response.raise_for_status()
@@ -88,6 +87,9 @@ class CheckWorker(QThread):
 
     def run(self):
         try:
+            # Lazy import de requests para no penalizar el arranque
+            import requests
+
             logging.info("Buscando actualizaciones en GitHub...")
             # 10s es razonable para una API REST con latencia ocasional.
             response = requests.get(self.api_url, timeout=10)
@@ -96,9 +98,10 @@ class CheckWorker(QThread):
                 data = response.json()
                 latest_tag = data.get("tag_name", "v0.0.0").lstrip('v')
 
-                # Comparar versiones semánticamente (ej: "6.0.2" -> (6, 0, 2))
+                # Comparar versiones semánticamente de forma robusta frente a sufijos (-beta, rc)
                 def parse_v(v_str):
-                    return tuple(map(int, (v_str.split('.'))))
+                    parts = re.findall(r'\d+', v_str)
+                    return tuple(map(int, parts)) if parts else (0, 0, 0)
 
                 try:
                     latest_tuple = parse_v(latest_tag)
@@ -163,7 +166,11 @@ class UpdateManager(QObject):
         Inicia la descarga del nuevo ejecutable.
         El archivo se guardará como 'GRK_PowerSloth.new'
         """
-        current_exe = Path(sys.executable)
+        if getattr(sys, 'frozen', False):
+            current_exe = Path(sys.executable)
+        else:
+            current_exe = Path(sys.argv[0]).resolve().parent / "GRK_PowerSloth.exe"
+
         target_path = current_exe.with_name("GRK_PowerSloth.new")
 
         self._download_worker = DownloadWorker(url, target_path)
@@ -188,7 +195,11 @@ class UpdateManager(QObject):
         """
         Realiza el baile del renombrado (Hot-Swap) y reinicia.
         """
-        exe_path = Path(sys.executable)
+        if getattr(sys, 'frozen', False):
+            exe_path = Path(sys.executable)
+        else:
+            exe_path = Path(sys.argv[0]).resolve().parent / "GRK_PowerSloth.exe"
+
         dir_path = exe_path.parent
         new_file = dir_path / "GRK_PowerSloth.new"
         old_file = dir_path / "GRK_PowerSloth.old"

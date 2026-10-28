@@ -7,7 +7,6 @@ Coordina entre la Vista (MainWindow) y los Servicios.
 """
 
 import ctypes
-import subprocess
 from datetime import datetime, timedelta
 from typing import Optional
 from PyQt6.QtCore import QObject, QTimer, Qt
@@ -208,7 +207,7 @@ class MainPresenter(QObject):
     
     def _on_window_state_changed(self, state):
         """Handler cuando cambia el estado de la ventana"""
-        if state == Qt.WindowState.WindowMinimized:
+        if bool(state & Qt.WindowState.WindowMinimized):
             self.view.hide_window()
             self.view.show_tray_icon()
             self.view.show_notification(
@@ -464,20 +463,10 @@ class MainPresenter(QObject):
             self.view.update_status(LocalizationManager.get("status_executing"))
             
             try:
-                force_args = ["/f"] if self.view.get_is_force_close_enabled() else []
-
-                if action == PowerAction.SHUTDOWN:
-                    subprocess.run(["shutdown", "/s", *force_args, "/t", "0"], shell=False)
-                elif action == PowerAction.RESTART:
-                    subprocess.run(["shutdown", "/r", *force_args, "/t", "0"], shell=False)
-                elif action == PowerAction.RESTART_UEFI:
-                    subprocess.run(["shutdown", "/r", "/fw", *force_args, "/t", "0"], shell=False)
-                elif action == PowerAction.HIBERNATE:
-                    subprocess.run(["shutdown", "/h"], shell=False)
-                elif action == PowerAction.SLEEP:
-                    # Win32 directo evita levantar cmd.exe + rundll32 sólo para suspender.
-                    ctypes.windll.powrprof.SetSuspendState(0, 1, 0)
-
+                SystemIntegration.execute_power_action(
+                    action,
+                    self.view.get_is_force_close_enabled()
+                )
                 QApplication.quit()
             
             except Exception as e:
@@ -659,6 +648,12 @@ class MainPresenter(QObject):
         self.settings.compact_mode = enabled
         self._schedule_save()
 
+    def _update_countdown_display(self):
+        """Actualiza todos los componentes visuales de la cuenta atrás."""
+        self._update_status_label()
+        self._update_progress_bar_color()
+        self._update_window_title()
+
     # ===== HANDLERS DE TIEMPO (MODO COMPACTO) =====
     
     def _on_add_time_clicked(self):
@@ -666,15 +661,14 @@ class MainPresenter(QObject):
         INCREMENT = 5 * 60
         if self.is_running:
             self.remaining_seconds += INCREMENT
-            self.total_seconds += INCREMENT # Mantener escala de barra de progreso
+            self.total_seconds += INCREMENT  # Mantener escala de barra de progreso
             self._update_countdown_display()
         else:
             h, m, s = self.view.get_countdown_time()
             total = h * 3600 + m * 60 + s + INCREMENT
             self._update_spinboxes_from_seconds(total)
             self._update_end_time_preview()
-            # Forzar actualización de label mini
-            self.view.update_status(self.view.lbl_status.text())
+            self.view.refresh_status_from_inputs()
 
     def _on_sub_time_clicked(self):
         """Resta 5 minutos al tiempo actual"""
@@ -689,8 +683,7 @@ class MainPresenter(QObject):
             total = max(0, h * 3600 + m * 60 + s - DECREMENT)
             self._update_spinboxes_from_seconds(total)
             self._update_end_time_preview()
-            # Forzar actualización de label mini
-            self.view.update_status(self.view.lbl_status.text())
+            self.view.refresh_status_from_inputs()
 
     def _update_spinboxes_from_seconds(self, total_seconds: int):
         """Helper para actualizar los spinboxes desde un total de segundos"""
