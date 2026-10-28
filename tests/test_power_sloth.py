@@ -108,7 +108,8 @@ class TestPowerSlothV620(unittest.TestCase):
             "schedule_btn_add", "schedule_btn_edit", "schedule_btn_delete",
             "schedule_col_status", "schedule_col_name", "schedule_col_action",
             "day_short_0", "day_short_6",
-            "history_title", "history_description", "history_status_completed"
+            "history_title", "history_description", "history_status_completed",
+            "about_version", "about_date"
         ]
 
         for lang in [Language.SPANISH, Language.ENGLISH, Language.PORTUGUESE, Language.FRENCH]:
@@ -117,6 +118,8 @@ class TestPowerSlothV620(unittest.TestCase):
                 val = LocalizationManager.get(k)
                 self.assertNotEqual(val, k, f"Clave '{k}' no está traducida en {lang.name}")
                 self.assertTrue(len(val) > 0)
+            self.assertIn("6.2.0", LocalizationManager.get("about_version"), f"about_version no contiene 6.2.0 en {lang.name}")
+            self.assertIn("2026", LocalizationManager.get("about_date"), f"about_date no contiene 2026 en {lang.name}")
 
         # Probar fallback a inglés si falta en un idioma secundario
         LocalizationManager.set_language(Language.PORTUGUESE)

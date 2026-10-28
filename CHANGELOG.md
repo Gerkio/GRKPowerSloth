@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [6.2.0] - 2026-10-27
+## [6.2.0] - 2026-10-28
 
 Actualización técnica integral de rendimiento, huella de memoria, estabilidad y escalabilidad. Sin adición de nuevas funciones ni alteraciones de la interfaz: el programa es más ligero, arranca más rápido, consume menos recursos y resuelve todos los bugs latentes y restricciones arquitectónicas.
 
@@ -15,6 +15,7 @@ Actualización técnica integral de rendimiento, huella de memoria, estabilidad 
 
 ### 🐛 Bug Fixes & Estabilidad
 - **Crash en modo compacto solucionado**: corregida la excepción no capturada (`AttributeError`) al pulsar `+` o `-` durante una cuenta atrás activa por llamada a un método ausente.
+- **Elevación UAC nativa en ejecutable**: especificación PyInstaller configurada con `uac_admin=True` para incrustar el manifiesto de ejecución como administrador en el PE y corrección en `run_as_admin` para ejecutables congelados, erradicando fallos de `LoadLibrary` en DLLs temporales (`_MEIPASS2`).
 - **Respeto estricto del patrón MVP**: se eliminó el acceso directo a widgets internos (`lbl_status`) desde el presentador, canalizándolo por métodos públicos de la vista (`refresh_status_from_inputs`).
 - **Persistencia atómica de configuración**: `SettingsManager.save()` ahora utiliza escritura atómica con archivo temporal y reemplazo, previniendo la corrupción de `settings.json` ante apagados súbitos del sistema.
 - **Deserialización resiliente de configuración**: `AppSettings.from_dict()` filtra dinámicamente claves desconocidas o de futuras versiones sin fallar con `TypeError`.
@@ -23,6 +24,7 @@ Actualización técnica integral de rendimiento, huella de memoria, estabilidad 
 - **Detección de minimizado**: uso de máscara de bits en `_on_window_state_changed` para garantizar la minimización a la bandeja independientemente de banderas activas del gestor de ventanas.
 
 ### 🌐 Localización e Internacionalización Completa (ES, EN, PT, FR)
+- **Sincronización del diálogo Acerca de**: actualización de las cadenas de versión y fecha de lanzamiento en los 4 idiomas y sincronización dinámica de `AboutDialog` con la versión de la aplicación.
 - **Erradicación de cadenas hardcodeadas**: localización completa de los diálogos de eventos programados (`ScheduleDialog`), editor de eventos (`ScheduleEventEditDialog`) y visor de historial (`HistoryDialog`), así como nombres de días y recurrencias.
 - **Mecanismo de fallback seguro**: `LocalizationManager.get()` ahora recurre al diccionario en inglés antes de retornar la clave cruda en caso de traducciones pendientes en portugués o francés.
 

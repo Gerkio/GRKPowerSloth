@@ -3,7 +3,7 @@ Diálogo About (Acerca de).
 Equivalente a AboutForm.cs
 """
 
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap, QFont
 from managers.localization_manager import LocalizationManager
@@ -57,7 +57,14 @@ class AboutDialog(QDialog):
         title_layout = QVBoxLayout()
         lbl_title = QLabel("GRK PowerSloth")
         lbl_title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
-        lbl_version = QLabel(LocalizationManager.get("about_version"))
+        
+        app_version = QApplication.applicationVersion()
+        version_text = LocalizationManager.get("about_version")
+        if app_version:
+            import re
+            version_text = re.sub(r'\d+\.\d+\.\d+', app_version, version_text)
+            
+        lbl_version = QLabel(version_text)
         lbl_version.setFont(QFont("Segoe UI", 9))
         
         title_layout.addWidget(lbl_title)

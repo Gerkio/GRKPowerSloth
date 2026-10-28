@@ -3,17 +3,17 @@
 **El programador de apagado definitivo para Windows.**  
 Automatiza el apagado, reinicio o suspensión de tu PC basándose en tiempo o actividad de procesos. Ideal para dejar renderizando, descargando o compilando por la noche.
 
-## ✨ Novedades en v6.1.2
+## ✨ Novedades en v6.2.0
 
-Versión de mantenimiento centrada en **robustez** y **consistencia de UI**. Sin cambios funcionales mayores; mismo comportamiento de cara al usuario, pero más resistente y pulida.
+Actualización técnica integral de rendimiento, huella de memoria, estabilidad y escalabilidad. Sin adición de nuevas funciones ni alteraciones de la interfaz: el programa es más ligero, arranca más rápido, consume menos recursos y resuelve bugs latentes y restricciones arquitectónicas.
 
-*   **🌍 Localización al 100%:** Los menús, el aviso de "ya en ejecución" y el diálogo de actualización ahora cambian de idioma sin dejar fragmentos en español. Temas Nordic / Dracula / Blood Moon e idiomas Português / Français se traducen al cambiar idioma.
-*   **🛡️ Calendario más fiable:** Mejor manejo de eventos a fin de mes (día 31 en febrero, etc.), cambios de hora del sistema y DST. Sin doble disparo. Escritura atómica de eventos e historial.
-*   **🔒 OTA más robusto:** Timeout en la descarga, validación de espacio en disco, cancelación limpia desde el botón cerrar, y rollback automático si falla el swap del `.exe`.
-*   **⚙️ Iniciar con Windows:** Si mueves el `.exe` a otra carpeta tras habilitar autostart, la app lo detecta y desactiva la opción en vez de fallar al arrancar Windows.
-*   **🐛 Bugfixes destacados:** Eliminado el bug del countdown que se reescribía con el valor del spinbox; animaciones del modo compacto sin slots colgando al alternar rápido; el `closeEvent` detiene todos los timers correctamente.
+*   **⚡ Modelos ultra-ligeros (`slots=True`):** Entidades de configuración, procesos, historial y calendario optimizadas en memoria para Python 3.12+.
+*   **🚀 Carga perezosa (Lazy loading):** `requests` solo se carga bajo demanda al buscar actualizaciones, liberando 12-15 MB de RAM en frío y acelerando el arranque.
+*   **🛡️ Persistencia atómica:** Guardado a prueba de cortes de energía en `settings.json` mediante escritura atómica con archivo temporal.
+*   **🌍 Localización al 100%:** Diálogos de eventos, historial y panel Acerca de actualizados y localizados al 100% en Español, Inglés, Portugués y Francés.
+*   **🐛 Bugfixes y estabilidad:** Solucionado el crash por `AttributeError` en botones +/- en modo compacto y elevación UAC nativa con manifiesto integrado en el ejecutable.
 
-> Para el detalle completo de los 23 ítems de auditoría aplicados, ver [`CHANGELOG.md`](CHANGELOG.md).
+> Para el detalle completo de cambios, ver [`CHANGELOG.md`](CHANGELOG.md).
 
 ## 🚀 Características Principales
 
