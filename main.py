@@ -39,7 +39,13 @@ def run_as_admin():
         params = ' '.join([f'"{arg}"' for arg in sys.argv[1:]])
         # Limpiar _MEIPASS2 del entorno para evitar que la nueva instancia
         # intente reutilizar la carpeta temporal que el proceso saliente eliminará
+        os.environ.pop("_MEIPASS", None)
         os.environ.pop("_MEIPASS2", None)
+        try:
+            ctypes.windll.kernel32.SetEnvironmentVariableW("_MEIPASS", None)
+            ctypes.windll.kernel32.SetEnvironmentVariableW("_MEIPASS2", None)
+        except Exception:
+            pass
     else:
         # Modo desarrollo (ejecución directa de script .py)
         script_path = Path(__file__).resolve()
@@ -148,7 +154,7 @@ def main():
     # Crear aplicación Qt
     app = QApplication(sys.argv)
     app.setApplicationName("GRK PowerSloth")
-    app.setApplicationVersion("6.2.0")  # Optimization & Stability Version
+    app.setApplicationVersion("6.3.0")  # Optimization & Stability Version
     app.setOrganizationName("Gerkio")
 
     # ===== SINGLETON CHECK (Instancia Única) =====

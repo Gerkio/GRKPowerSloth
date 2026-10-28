@@ -95,6 +95,7 @@ class MainPresenter(QObject):
         
         # Conectar eventos del monitor de procesos
         self.process_monitor.monitoring_success.connect(self._on_monitoring_success)
+        self.process_monitor.monitoring_status.connect(self._on_monitoring_status_updated)
         self.process_monitor.monitoring_log.connect(lambda msg: print(msg))
         self.process_monitor.monitoring_error.connect(lambda err: print(f"ERROR: {err}"))
         
@@ -281,13 +282,17 @@ class MainPresenter(QObject):
         
         try:
             if self.view.get_is_monitor_by_exit():
-                self.process_monitor.start_monitoring_for_exit(selected_process['pid'])
+                self.process_monitor.start_monitoring_for_exit(
+                    selected_process['pid'],
+                    selected_process.get('name')
+                )
             else:
                 self.process_monitor.start_monitoring_for_network_idle(
                     selected_process['pid'],
                     selected_process['name']
                 )
             
+            self._activate_keep_awake()
             self._update_ui_state(True)
             status_text = LocalizationManager.get("status_monitoring").format(
                 selected_process['display_name']
@@ -345,6 +350,10 @@ class MainPresenter(QObject):
             self._deactivate_keep_awake()
             self._execute_final_action()
     
+    def _on_monitoring_status_updated(self, status_text: str, mini_text: str):
+        """Handler para actualizaciones periódicas de telemetría del monitor de procesos"""
+        self.view.update_status(status_text, mini_text)
+
     def _on_monitoring_success(self):
         """Handler cuando el monitoreo detecta la condición"""
         self._execute_final_action()

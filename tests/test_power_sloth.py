@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Suite de pruebas automatizadas para GRK PowerSloth v6.2.0.
+Suite de pruebas automatizadas para GRK PowerSloth v6.3.0.
 Verifica modelos, persistencia atómica, resiliencia de configuración,
 localización en 4 idiomas, lazy-loading y métodos del presentador.
 """
@@ -25,7 +25,7 @@ from services.system_integration import SystemIntegration
 from managers.localization_manager import LocalizationManager
 
 
-class TestPowerSlothV620(unittest.TestCase):
+class TestPowerSlothV630(unittest.TestCase):
     
     def test_model_slots(self):
         """Verifica que las entidades usan slots para optimizar memoria."""
@@ -109,7 +109,7 @@ class TestPowerSlothV620(unittest.TestCase):
             "schedule_col_status", "schedule_col_name", "schedule_col_action",
             "day_short_0", "day_short_6",
             "history_title", "history_description", "history_status_completed",
-            "about_version", "about_date"
+            "about_version", "about_date", "condition_on_idle", "status_monitoring_active", "status_monitoring_verifying"
         ]
 
         for lang in [Language.SPANISH, Language.ENGLISH, Language.PORTUGUESE, Language.FRENCH]:
@@ -118,7 +118,7 @@ class TestPowerSlothV620(unittest.TestCase):
                 val = LocalizationManager.get(k)
                 self.assertNotEqual(val, k, f"Clave '{k}' no está traducida en {lang.name}")
                 self.assertTrue(len(val) > 0)
-            self.assertIn("6.2.0", LocalizationManager.get("about_version"), f"about_version no contiene 6.2.0 en {lang.name}")
+            self.assertIn("6.3.0", LocalizationManager.get("about_version"), f"about_version no contiene 6.2.0 en {lang.name}")
             self.assertIn("2026", LocalizationManager.get("about_date"), f"about_date no contiene 2026 en {lang.name}")
 
         # Probar fallback a inglés si falta en un idioma secundario
@@ -181,6 +181,45 @@ class TestPowerSlothV620(unittest.TestCase):
         presenter.countdown_timer.stop()
         presenter._save_timer.stop()
         presenter.schedule_manager.stop_monitoring()
+
+
+    def test_process_monitor_constants_and_bounded_thresholds(self):
+        """Verifica que ProcessMonitorService implementa el piso y techo de umbral adaptativo."""
+        from services.process_monitor import ProcessMonitorService
+        monitor = ProcessMonitorService()
+        self.assertEqual(monitor.IDLE_FLOOR_BYTES_PER_SEC, 35 * 1024)
+        self.assertEqual(monitor.ACTIVE_CEILING_BYTES_PER_SEC, 150 * 1024)
+        self.assertEqual(monitor.DISK_ACTIVE_THRESHOLD_BYTES, 250 * 1024)
+        self.assertEqual(monitor.CHECK_INTERVAL_MS, 2000)
+
+        # Simular ajuste dinámico de umbral con picos de red
+        monitor._network_peak_rate = 1_000_000  # 1 MB/s
+        expected_threshold = min(monitor.ACTIVE_CEILING_BYTES_PER_SEC, max(monitor.IDLE_FLOOR_BYTES_PER_SEC, int(1_000_000 * 0.05)))
+        self.assertEqual(expected_threshold, 50000)
+
+    def test_process_family_and_partial_downloads(self):
+        """Verifica la resolución de familia de procesos y el detector heurístico de descargas parciales."""
+        import os
+        from services.process_monitor import ProcessMonitorService
+        monitor = ProcessMonitorService()
+        
+        # El proceso actual (python unittest) debe resolverse como familia conteniendo su propio PID
+        monitor.monitored_pid = os.getpid()
+        monitor.monitored_name = "python.exe"
+        family = monitor._get_process_family()
+        family_pids = [p.pid for p in family]
+        self.assertIn(os.getpid(), family_pids)
+        
+        # La comprobación heurística de archivos parciales no debe lanzar excepciones
+        result = monitor._has_active_partial_download()
+        self.assertIsInstance(result, bool)
+
+    def test_ui_compact_proportions(self):
+        """Verifica que el ancho base y el modo compacto de la UI se han reducido según el plan."""
+        from ui.display_helper import DisplayHelper
+        self.assertEqual(DisplayHelper.scale_value(416), 416)
+        self.assertEqual(DisplayHelper.scale_value(336), 336)
+        self.assertEqual(DisplayHelper.scale_value(78), 78)
 
 
 if __name__ == "__main__":

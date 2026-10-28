@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
         self._scale_factor = DisplayHelper.get_scale_factor()
         
         # Ancho fijo, altura dinámica
-        self.setFixedWidth(DisplayHelper.scale_value(480))
+        self.setFixedWidth(DisplayHelper.scale_value(416))
         # La altura se ajustará automáticamente al contenido
         
         # Intentar cargar icono desde el proyecto original
@@ -131,12 +131,12 @@ class MainWindow(QMainWindow):
         # --- CONTAINER ESTÁNDAR ---
         self.standard_container = QWidget()
         self._standard_layout = QVBoxLayout(self.standard_container)
-        self._standard_layout.setSpacing(DisplayHelper.get_spacing(10))
+        self._standard_layout.setSpacing(DisplayHelper.get_spacing(6))
         self._standard_layout.setContentsMargins(
-            DisplayHelper.get_padding(14),
-            DisplayHelper.get_padding(14),
-            DisplayHelper.get_padding(14),
-            DisplayHelper.get_padding(14)
+            DisplayHelper.get_padding(10),
+            DisplayHelper.get_padding(8),
+            DisplayHelper.get_padding(10),
+            DisplayHelper.get_padding(10)
         )
         self._main_layout.addWidget(self.standard_container)
         self._setup_standard_ui(self._standard_layout)
@@ -146,10 +146,10 @@ class MainWindow(QMainWindow):
         self.compact_container.setVisible(False)
         self._compact_layout = QVBoxLayout(self.compact_container)
         self._compact_layout.setContentsMargins(
-            DisplayHelper.get_padding(10),
-            DisplayHelper.get_padding(5),
-            DisplayHelper.get_padding(10),
-            DisplayHelper.get_padding(5)
+            DisplayHelper.get_padding(6),
+            DisplayHelper.get_padding(4),
+            DisplayHelper.get_padding(6),
+            DisplayHelper.get_padding(4)
         )
         self._main_layout.addWidget(self.compact_container)
         self._setup_compact_ui(self._compact_layout)
@@ -162,7 +162,8 @@ class MainWindow(QMainWindow):
         # ========== GRUPO: CONDICIÓN DE DISPARO (Layout Horizontal) ==========
         self.group_trigger = QGroupBox(LocalizationManager.get("trigger_condition_label"))
         trigger_layout = QHBoxLayout()  # Horizontal para ahorrar espacio
-        trigger_layout.setSpacing(DisplayHelper.get_spacing(15))
+        trigger_layout.setContentsMargins(4, 2, 4, 2)
+        trigger_layout.setSpacing(DisplayHelper.get_spacing(6))
         
         # Radio buttons para modos
         self.radio_countdown = QRadioButton(LocalizationManager.get("mode_countdown"))
@@ -186,30 +187,33 @@ class MainWindow(QMainWindow):
         # ========== PANEL: COUNTDOWN ==========
         self.panel_countdown = QWidget()
         countdown_layout = QGridLayout(self.panel_countdown)
-        countdown_layout.setSpacing(10)
+        countdown_layout.setSpacing(DisplayHelper.get_spacing(6))
         
         # Labels
         lbl_hours = QLabel(LocalizationManager.get("hours"))
         lbl_minutes = QLabel(LocalizationManager.get("minutes"))
         lbl_seconds = QLabel(LocalizationManager.get("seconds"))
         
-        # SpinBoxes con validación visual
-        spinbox_width = DisplayHelper.scale_value(80)
+        # SpinBoxes con validación visual y alineación centrada
+        spinbox_width = DisplayHelper.scale_value(58)
         
         self.spin_hours = ValidatedSpinBox()
         self.spin_hours.setRange(0, 23)  # Límite lógico de horas
         self.spin_hours.setValue(0)
-        self.spin_hours.setMinimumWidth(spinbox_width)
+        self.spin_hours.setFixedWidth(spinbox_width)
+        self.spin_hours.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.spin_minutes = ValidatedSpinBox()
         self.spin_minutes.setRange(0, 59)
         self.spin_minutes.setValue(30)
-        self.spin_minutes.setMinimumWidth(spinbox_width)
+        self.spin_minutes.setFixedWidth(spinbox_width)
+        self.spin_minutes.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.spin_seconds = ValidatedSpinBox()
         self.spin_seconds.setRange(0, 59)
         self.spin_seconds.setValue(0)
-        self.spin_seconds.setMinimumWidth(spinbox_width)
+        self.spin_seconds.setFixedWidth(spinbox_width)
+        self.spin_seconds.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Layout de countdown
         countdown_layout.addWidget(lbl_hours, 0, 0)
@@ -245,7 +249,7 @@ class MainWindow(QMainWindow):
         self.panel_monitor = QWidget()
         monitor_layout = QVBoxLayout(self.panel_monitor)
         monitor_layout.setContentsMargins(0, 0, 0, 0)
-        monitor_layout.setSpacing(12)
+        monitor_layout.setSpacing(DisplayHelper.get_spacing(6))
         
         # Selector de proceso (Movido arriba, filtro eliminado)
         
@@ -253,16 +257,16 @@ class MainWindow(QMainWindow):
         process_layout = QHBoxLayout()
         lbl_process = QLabel(LocalizationManager.get("process_label"))
         self.cmb_processes = QComboBox()
-        self.cmb_processes.setMinimumWidth(250)
-        self.cmb_processes.setFixedHeight(32)
+        self.cmb_processes.setMinimumWidth(DisplayHelper.scale_value(210))
+        self.cmb_processes.setFixedHeight(DisplayHelper.scale_value(28))
         
         # Botón de actualización con icono del sistema
         self.btn_refresh_processes = QPushButton()
         refresh_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
         self.btn_refresh_processes.setIcon(refresh_icon)
         self.btn_refresh_processes.setFixedSize(
-            DisplayHelper.scale_value(40),
-            DisplayHelper.scale_value(32)
+            DisplayHelper.scale_value(34),
+            DisplayHelper.scale_value(28)
         )
         self.btn_refresh_processes.setToolTip(LocalizationManager.get("tooltip_refresh"))
         
@@ -274,19 +278,19 @@ class MainWindow(QMainWindow):
         # ===== CONDICIÓN DE MONITOREO (Layout Horizontal Compacto) =====
         condition_container = QWidget()
         condition_container.setObjectName("conditionContainer")
-        condition_container.setFixedHeight(DisplayHelper.scale_value(65))  # Altura reducida
+        condition_container.setFixedHeight(DisplayHelper.scale_value(50))
         
         condition_layout = QVBoxLayout(condition_container)
-        condition_layout.setContentsMargins(12, 8, 12, 8)
-        condition_layout.setSpacing(4)
+        condition_layout.setContentsMargins(10, 4, 10, 4)
+        condition_layout.setSpacing(2)
         
         # Título
         lbl_condition = QLabel(LocalizationManager.get("monitoring_condition"))
-        lbl_condition.setFixedHeight(20)
+        lbl_condition.setFixedHeight(18)
         
         # Layout horizontal para los radio buttons
         radio_layout = QHBoxLayout()
-        radio_layout.setSpacing(DisplayHelper.get_spacing(20))
+        radio_layout.setSpacing(DisplayHelper.get_spacing(12))
         
         # Radio buttons
         self.radio_on_exit = QRadioButton(LocalizationManager.get("condition_on_exit"))
@@ -357,7 +361,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setMaximum(100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(True)
-        self.progress_bar.setMinimumHeight(25)
+        self.progress_bar.setFixedHeight(DisplayHelper.scale_value(18))
         main_layout.addWidget(self.progress_bar)
         
         # ========== ETIQUETAS DE ESTADO ==========
@@ -375,17 +379,17 @@ class MainWindow(QMainWindow):
         
         # ========== BOTONES DE ACCIÓN ==========
         buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(15)
+        buttons_layout.setSpacing(DisplayHelper.get_spacing(10))
         
         self.btn_start = QPushButton(f"▶ {LocalizationManager.get('start')}")
         self.btn_start.setObjectName("btnStart")
-        self.btn_start.setFixedHeight(45)
-        self.btn_start.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.btn_start.setFixedHeight(DisplayHelper.scale_value(36))
+        self.btn_start.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         
         self.btn_stop = QPushButton(f"⏹ {LocalizationManager.get('stop')}")
-        self.btn_stop.setFixedHeight(45)
+        self.btn_stop.setFixedHeight(DisplayHelper.scale_value(36))
         self.btn_stop.setEnabled(False)
-        self.btn_stop.setFont(QFont("Segoe UI", 11))
+        self.btn_stop.setFont(QFont("Segoe UI", 10))
         
         buttons_layout.addWidget(self.btn_start, 1)
         buttons_layout.addWidget(self.btn_stop, 1)
@@ -397,13 +401,13 @@ class MainWindow(QMainWindow):
         mini_widget = QWidget()
         mini_widget.setObjectName("miniController")
         mini_layout = QHBoxLayout(mini_widget)
-        mini_layout.setContentsMargins(15, 10, 15, 10)
-        mini_layout.setSpacing(15)
+        mini_layout.setContentsMargins(10, 6, 10, 6)
+        mini_layout.setSpacing(8)
         
         # 1. Botón de Expandir (Volver a modo normal)
         self.btn_expand_mini = QPushButton("↗️")
         self.btn_expand_mini.setObjectName("btnExpandMini")
-        self.btn_expand_mini.setFixedSize(30, 30)
+        self.btn_expand_mini.setFixedSize(DisplayHelper.scale_value(26), DisplayHelper.scale_value(26))
         self.btn_expand_mini.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_expand_mini.setToolTip(LocalizationManager.get("menu_compact"))
         
@@ -411,20 +415,20 @@ class MainWindow(QMainWindow):
         time_container = QWidget()
         time_layout = QHBoxLayout(time_container)
         time_layout.setContentsMargins(0, 0, 0, 0)
-        time_layout.setSpacing(5)
+        time_layout.setSpacing(4)
         
         self.btn_sub_time_mini = QPushButton("-")
         self.btn_sub_time_mini.setObjectName("btnTimeAdjustMini")
-        self.btn_sub_time_mini.setFixedSize(24, 24)
+        self.btn_sub_time_mini.setFixedSize(DisplayHelper.scale_value(22), DisplayHelper.scale_value(22))
         
         self.lbl_timer_mini = QLabel("00:30:00")
         self.lbl_timer_mini.setObjectName("timerMini")
-        self.lbl_timer_mini.setFont(QFont("Consolas", 22, QFont.Weight.Bold))
+        self.lbl_timer_mini.setFont(QFont("Consolas", 18, QFont.Weight.Bold))
         self.lbl_timer_mini.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.btn_add_time_mini = QPushButton("+")
         self.btn_add_time_mini.setObjectName("btnTimeAdjustMini")
-        self.btn_add_time_mini.setFixedSize(24, 24)
+        self.btn_add_time_mini.setFixedSize(DisplayHelper.scale_value(22), DisplayHelper.scale_value(22))
         
         time_layout.addWidget(self.btn_sub_time_mini)
         time_layout.addWidget(self.lbl_timer_mini)
@@ -433,12 +437,12 @@ class MainWindow(QMainWindow):
         # 3. Selector de Acción Mini (Icono)
         self.lbl_action_mini = QLabel("🛑") # Se actualizará dinámicamente
         self.lbl_action_mini.setObjectName("actionIconMini")
-        self.lbl_action_mini.setFont(QFont("Segoe UI Emoji", 18))
+        self.lbl_action_mini.setFont(QFont("Segoe UI Emoji", 14))
         
         # 4. Botón Start/Stop Mini (Circular)
         self.btn_start_stop_mini = QPushButton("▶")
         self.btn_start_stop_mini.setObjectName("btnStartStopMini")
-        self.btn_start_stop_mini.setFixedSize(45, 45)
+        self.btn_start_stop_mini.setFixedSize(DisplayHelper.scale_value(36), DisplayHelper.scale_value(36))
         self.btn_start_stop_mini.setCursor(Qt.CursorShape.PointingHandCursor)
         
         mini_layout.addWidget(self.btn_expand_mini)
@@ -453,7 +457,7 @@ class MainWindow(QMainWindow):
         # 4. Tiny Progress Bar al fondo
         self.mini_progress_bar = QProgressBar()
         self.mini_progress_bar.setObjectName("miniProgressBar")
-        self.mini_progress_bar.setFixedHeight(4)
+        self.mini_progress_bar.setFixedHeight(3)
         self.mini_progress_bar.setTextVisible(False)
         self.mini_progress_bar.setRange(0, 100)
         self.mini_progress_bar.setValue(0)
@@ -1142,15 +1146,15 @@ class MainWindow(QMainWindow):
             
         if enabled:
             # En modo compacto, el Mini Controller es una barra horizontal
-            self.setFixedWidth(DisplayHelper.scale_value(400))
-            self.setFixedHeight(DisplayHelper.scale_value(100))
+            self.setFixedWidth(DisplayHelper.scale_value(336))
+            self.setFixedHeight(DisplayHelper.scale_value(78))
             # Quitar menú en modo compacto para limpieza total (opcional)
             self.menuBar().setVisible(False)
         else:
-            # Volver a tamaño original
-            self.setFixedWidth(DisplayHelper.scale_value(480))
-            self.setMinimumHeight(DisplayHelper.scale_value(550))
-            self.setMaximumHeight(2000)
+            # Volver a tamaño original compacto
+            self.setFixedWidth(DisplayHelper.scale_value(416))
+            self.setMinimumHeight(0)
+            self.setMaximumHeight(16777215)
             self.menuBar().setVisible(True)
             self.adjustSize()
             

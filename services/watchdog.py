@@ -40,7 +40,10 @@ def _launch_app(extra_args: List[str] | None = None) -> subprocess.Popen:
         cmd = [sys.executable, _script_path()] + extra_args
     # DETACHED_PROCESS evita que el sub-proceso se cierre con la consola padre (solo Windows).
     creationflags = 0x00000008
-    return subprocess.Popen(cmd, creationflags=creationflags)
+    clean_env = os.environ.copy()
+    clean_env.pop("_MEIPASS", None)
+    clean_env.pop("_MEIPASS2", None)
+    return subprocess.Popen(cmd, creationflags=creationflags, env=clean_env)
 
 def monitor(restart_delay: float = 1.0, poll_interval: float = 2.0) -> None:
     """Monitoriza el proceso de la aplicación y lo reinicia si falla.

@@ -1,3 +1,5 @@
+import tempfile
+from pathlib import Path
 """
 Gestor de temas visuales - VERSIÓN MEJORADA
 Diseño moderno con alto contraste y elementos visuales atractivos.
@@ -197,22 +199,55 @@ class ThemeManager:
     # Caché de SVGs de flecha: dependen solo de (color, is_up), que forman un
     # conjunto finito (los colores de las paletas). Evita rehacer el base64 en
     # cada cambio de tema/idioma.
-    _arrow_svg_cache: Dict[tuple, str] = {}
+    _arrow_icon_cache: Dict[tuple, str] = {}
 
     @classmethod
-    def _get_arrow_svg(cls, color: str, is_up: bool) -> str:
-        """Genera (y cachea) un data URI para un SVG de flecha con el color dado."""
+    def _get_arrow_icon(cls, color: str, is_up: bool) -> str:
+        """Genera y cachea un icono PNG nítido de flecha en disco para Qt QSS."""
         cache_key = (color, is_up)
-        cached = cls._arrow_svg_cache.get(cache_key)
+        cached = cls._arrow_icon_cache.get(cache_key)
         if cached is not None:
             return cached
 
-        path = "M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z" if is_up else "M7.41,8.59L12,13.17L16.59,8.59L18,10L12,16L6,10L7.41,8.59Z"
-        svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="{color}"><path d="{path}"/></svg>'
-        encoded = base64.b64encode(svg.encode('utf-8')).decode('ascii')
-        data_uri = f"url(data:image/svg+xml;base64,{encoded})"
-        cls._arrow_svg_cache[cache_key] = data_uri
-        return data_uri
+        cache_dir = Path(tempfile.gettempdir()) / "powersloth_assets"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        direction = "up" if is_up else "down"
+        clean_color = color.lstrip("#")
+        icon_path = cache_dir / f"arrow_{direction}_{clean_color}.png"
+
+        if not icon_path.exists():
+            from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QPainterPath
+            from PyQt6.QtCore import Qt
+
+            pix = QPixmap(16, 16)
+            pix.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pix)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            pen = QPen(QColor(color))
+            pen.setWidthF(2.0)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+
+            path = QPainterPath()
+            if is_up:
+                path.moveTo(3.5, 9.5)
+                path.lineTo(8.0, 5.0)
+                path.lineTo(12.5, 9.5)
+            else:
+                path.moveTo(3.5, 6.5)
+                path.lineTo(8.0, 11.0)
+                path.lineTo(12.5, 6.5)
+
+            painter.drawPath(path)
+            painter.end()
+            pix.save(str(icon_path), "PNG")
+
+        data_url = f"url({icon_path.as_posix()})"
+        cls._arrow_icon_cache[cache_key] = data_url
+        return data_url
 
     @classmethod
     def apply_theme(cls, widget, palette: ColorPalette, scale_factor: float = 1.0) -> None:
@@ -248,15 +283,15 @@ class ThemeManager:
         if palette.background == "#000000":
             arrow_color = "#FFFFFF"
             
-        arrow_up = cls._get_arrow_svg(arrow_color, True)
-        arrow_down = cls._get_arrow_svg(arrow_color, False)
+        arrow_up = cls._get_arrow_icon(arrow_color, True)
+        arrow_down = cls._get_arrow_icon(arrow_color, False)
         
         # Grosor de bordes para alto contraste
         border_width = "2px" if palette.background == "#000000" else "1px"
         border_width_focus = "3px" if palette.background == "#000000" else "2px"
         
-        # Tamaño de botones escalado (más grande)
-        spin_btn_width = int(24 * scale_factor)
+        # Tamaño de botones escalado compacto
+        spin_btn_width = int(15 * scale_factor)
         
         stylesheet = f"""
             /* ===== BASE ===== */
@@ -279,8 +314,8 @@ class ThemeManager:
                 background-color: {palette.surface};
                 border: {border_width} solid {palette.border};
                 border-radius: 8px;
-                margin-top: 16px;
-                padding: 15px 10px 10px 10px;
+                margin-top: 14px;
+                padding: 10px 6px 8px 6px;
                 font-weight: bold;
                 color: {palette.text_primary};
             }}
@@ -288,9 +323,9 @@ class ThemeManager:
             QGroupBox::title {{
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                left: 12px;
-                top: 4px;
-                padding: 0 8px;
+                left: 10px;
+                top: 2px;
+                padding: 0 6px;
                 background-color: {palette.surface};
                 color: {palette.accent_primary};
                 font-weight: bold;
@@ -300,14 +335,15 @@ class ThemeManager:
             QRadioButton {{
                 color: {palette.text_primary};
                 background-color: transparent;
-                spacing: 8px;
-                padding: 6px 4px;
+                spacing: 5px;
+                padding: 2px 2px;
+                font-size: 9pt;
             }}
             
             QRadioButton::indicator {{
-                width: 18px;
-                height: 18px;
-                border-radius: 9px;
+                width: 15px;
+                height: 15px;
+                border-radius: 7px;
                 border: 2px solid {palette.border};
                 background-color: {palette.surface};
             }}
@@ -356,7 +392,7 @@ class ThemeManager:
                 color: {palette.text_primary};
                 border: {border_width} solid {palette.border};
                 border-radius: 6px;
-                padding: 10px 20px;
+                padding: 6px 14px;
                 font-weight: 500;
                 min-height: 20px;
             }}
@@ -383,7 +419,7 @@ class ThemeManager:
                 color: #ffffff;
                 border: none;
                 font-weight: bold;
-                font-size: 11pt;
+                font-size: 10pt;
             }}
             
             QPushButton#btnStart:hover {{
@@ -399,14 +435,15 @@ class ThemeManager:
                 color: {palette.surface};
             }}
             
-            /* ===== SPIN BOX - Moderno ===== */
+            /* ===== SPIN BOX - Moderno & Ergonómico ===== */
             QSpinBox, QTimeEdit {{
                 background-color: {palette.surface};
                 color: {palette.text_primary};
-                border: {border_width_focus} solid {palette.border};
-                border-radius: 6px;
-                padding: 6px 10px;
-                min-height: 24px;
+                border: {border_width} solid {palette.border};
+                border-radius: 5px;
+                padding: 1px 2px 1px 4px;
+                min-height: 22px;
+                font-size: 10pt;
                 selection-background-color: {palette.accent_primary};
             }}
             
@@ -425,30 +462,45 @@ class ThemeManager:
                 background-color: {"#3a1a1a" if palette.background != "#FFFFFF" else "#ffe0e0"} !important;
             }}
             
-            QSpinBox::up-button, QSpinBox::down-button,
-            QTimeEdit::up-button, QTimeEdit::down-button {{
+            QSpinBox::up-button, QTimeEdit::up-button {{
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: {spin_btn_width}px;
                 background-color: {palette.surface_hover};
                 border: none;
-                width: {spin_btn_width}px;
-                border-radius: 3px;
-                margin: 1px;
+                border-left: 1px solid {palette.border};
+                border-bottom: 1px solid {palette.border};
+                border-top-right-radius: 4px;
             }}
             
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover,
-            QTimeEdit::up-button:hover, QTimeEdit::down-button:hover {{
+            QSpinBox::up-button:hover, QTimeEdit::up-button:hover {{
                 background-color: {palette.accent_primary};
             }}
             
             QSpinBox::up-arrow, QTimeEdit::up-arrow {{
                 image: {arrow_up};
-                width: 14px;
-                height: 14px;
+                width: 8px;
+                height: 8px;
+            }}
+            
+            QSpinBox::down-button, QTimeEdit::down-button {{
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                width: {spin_btn_width}px;
+                background-color: {palette.surface_hover};
+                border: none;
+                border-left: 1px solid {palette.border};
+                border-bottom-right-radius: 4px;
+            }}
+            
+            QSpinBox::down-button:hover, QTimeEdit::down-button:hover {{
+                background-color: {palette.accent_primary};
             }}
             
             QSpinBox::down-arrow, QTimeEdit::down-arrow {{
                 image: {arrow_down};
-                width: 14px;
-                height: 14px;
+                width: 8px;
+                height: 8px;
             }}
             
             /* ===== COMBOBOX - Estilizado ===== */
@@ -643,9 +695,9 @@ class ThemeManager:
             }}
             
             #conditionContainer QRadioButton::indicator {{
-                width: 18px;
-                height: 18px;
-                border-radius: 9px;
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
                 border: 2px solid {palette.border};
                 background-color: {palette.surface};
             }}
@@ -663,18 +715,18 @@ class ThemeManager:
             #miniController {{
                 background-color: {palette.surface};
                 border: {border_width} solid {palette.accent_primary};
-                border-radius: 40px; /* Pill shape */
-                margin: 5px;
+                border-radius: 30px; /* Pill shape */
+                margin: 2px;
             }}
             
             #timerMini {{
                 color: {palette.text_primary};
                 font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 24pt;
+                font-size: 18pt;
                 font-weight: bold;
                 background: transparent;
-                padding: 0px 10px;
-                min-width: 140px;
+                padding: 0px 4px;
+                min-width: 110px;
             }}
             
             #actionIconMini {{
@@ -685,7 +737,7 @@ class ThemeManager:
             #btnExpandMini {{
                 background: transparent;
                 border: none;
-                font-size: 14pt;
+                font-size: 12pt;
                 padding: 2px;
                 color: {palette.text_disabled};
             }}
@@ -698,8 +750,8 @@ class ThemeManager:
                 background-color: {palette.surface_hover};
                 color: {palette.text_primary};
                 border: 1px solid {palette.border};
-                border-radius: 12px;
-                font-size: 11pt;
+                border-radius: 11px;
+                font-size: 10pt;
                 font-weight: bold;
                 padding: 0;
             }}
@@ -714,11 +766,11 @@ class ThemeManager:
                 background-color: {palette.accent_primary};
                 color: #ffffff;
                 border: none;
-                border-radius: 22px; /* Circular */
-                font-size: 16pt;
+                border-radius: 18px; /* Circular */
+                font-size: 13pt;
                 padding: 0;
-                min-width: 45px;
-                min-height: 45px;
+                min-width: 36px;
+                min-height: 36px;
             }}
             
             #btnStartStopMini:hover {{
@@ -733,8 +785,8 @@ class ThemeManager:
                 background-color: transparent;
                 border: none;
                 border-radius: 0;
-                min-height: 4px;
-                max-height: 4px;
+                min-height: 3px;
+                max-height: 3px;
             }}
             
             #miniProgressBar::chunk {{

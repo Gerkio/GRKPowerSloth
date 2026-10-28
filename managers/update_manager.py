@@ -13,7 +13,7 @@ from managers.localization_manager import LocalizationManager
 # Constantes del Repositorio
 GITHUB_USER = "Gerkio"
 GITHUB_REPO = "GRKPowerSloth"
-CURRENT_VERSION = "6.2.0"  # Sincronizar con main.py app.setApplicationVersion()
+CURRENT_VERSION = "6.3.0"  # Sincronizar con main.py app.setApplicationVersion()
 
 class DownloadWorker(QThread):
     """Worker thread para descargar la actualización sin congelar la UI"""
@@ -228,6 +228,8 @@ timeout /t 1 /nobreak > NUL
 del "{esc_old}" 2>NUL
 move "{esc_exe}" "{esc_old}" || exit /b 1
 move "{esc_new}" "{esc_exe}" || (move "{esc_old}" "{esc_exe}" >NUL 2>&1 & exit /b 1)
+set _MEIPASS=
+set _MEIPASS2=
 start "" "{esc_exe}"
 del "%~f0"
 """
@@ -236,7 +238,10 @@ del "%~f0"
             f.write(bat_script)
             
         # Ejecutar bat y salir
-        subprocess.Popen(str(bat_path), shell=True)
+        clean_env = os.environ.copy()
+        clean_env.pop("_MEIPASS", None)
+        clean_env.pop("_MEIPASS2", None)
+        subprocess.Popen(str(bat_path), shell=True, env=clean_env)
         sys.exit(0)
 
     @staticmethod

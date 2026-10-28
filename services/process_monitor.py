@@ -2,339 +2,447 @@
 Servicio para monitorizar procesos.
 Equivalente a ProcessMonitorService.cs
 
-Este es el componente más complejo del sistema, responsable de:
-1. Monitorear cierre de procesos
-2. Detectar inactividad de red (algoritmo sofisticado)
-3. Health checks periódicos
-4. Manejo robusto de errores con reintentos
+Responsable de:
+1. Monitorear cierre de procesos (ON_EXIT) con verificación de familia y ventanas
+2. Detectar fin de descargas (ON_NETWORK_IDLE / Al terminar descarga)
+   mediante fusión de 3 señales: familia de procesos, I/O de disco/red y candado de archivos parciales.
+3. Health checks periódicos y timeouts de seguridad.
+4. Notificación de estado en tiempo real.
 """
 
-import psutil
+import os
 import time
 from collections import deque
-from typing import Optional
+from pathlib import Path
+from typing import Dict, List, Optional
+import psutil
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 from models.enums import MonitoringMode
+from managers.localization_manager import LocalizationManager
+
+
+def _format_speed(bytes_per_sec: float) -> str:
+    """Convierte bytes/segundo a cadena legible."""
+    if bytes_per_sec < 1024:
+        return f"{bytes_per_sec:.0f} B/s"
+    elif bytes_per_sec < 1024 * 1024:
+        return f"{bytes_per_sec / 1024:.1f} KB/s"
+    else:
+        return f"{bytes_per_sec / (1024 * 1024):.1f} MB/s"
 
 
 class ProcessMonitorService(QObject):
     """
     Servicio mejorado para monitorizar procesos, con detección robusta
-    tanto por finalización como por inactividad de red.
-    
-    Características:
-    - Monitoreo por cierre de proceso (ON_EXIT)
-    - Monitoreo por inactividad de red (ON_NETWORK_IDLE)
-    - Baseline dinámico de actividad de red
-    - Ventana deslizante para filtrar picos transitorios
-    - Threshold adaptativo
-    - Health checks periódicos
-    - Timeout de seguridad (24h máximo)
-    - Reintentos con backoff exponencial
+    tanto por finalización como por fin de descarga.
     """
     
-    # Signals (eventos thread-safe de PyQt6)
+    # Signals
     monitoring_success = pyqtSignal()
     monitoring_error = pyqtSignal(str)
     monitoring_log = pyqtSignal(str)
+    monitoring_status = pyqtSignal(str, str)  # (status_detallado, status_mini)
     
     # ===== CONFIGURACIÓN =====
+    CHECK_INTERVAL_MS = 2000              # Muestreo constante cada 2 segundos
+    HISTORY_WINDOW_SIZE = 15              # Ventana deslizante de 15 muestras (30s)
+    IDLE_CONFIRMATION_SECONDS = 40        # 40 segundos de inactividad sostenida para confirmar fin
     
-    # Para detección de inactividad de red
-    HISTORY_WINDOW_SIZE = 10              # Últimas 10 mediciones
-    IDLE_THRESHOLD_SECONDS = 15           # 15 segundos de inactividad sostenida
-    NETWORK_USAGE_THRESHOLD_BYTES = 1024  # 1 KB/s mínimo
-    BASELINE_SAMPLES_NEEDED = 15          # 30 segundos de muestreo para baseline
-    REQUIRED_IDLE_CHECKS = 7              # 7 de 10 mediciones deben estar inactivas
+    # Umbrales acotados para evitar falsos positivos y falsos negativos
+    IDLE_FLOOR_BYTES_PER_SEC = 35 * 1024       # 35 KB/s piso (ignora telemetría/keep-alive en reposo)
+    ACTIVE_CEILING_BYTES_PER_SEC = 150 * 1024   # 150 KB/s techo (actividad garantizada independientemente del pico)
+    DISK_ACTIVE_THRESHOLD_BYTES = 250 * 1024    # 250 KB/s disco (detecta descompresión/verificación post-descarga)
     
-    # Control de monitoreo
-    MAX_RETRIES = 3
     MAX_MONITORING_DURATION_HOURS = 24
     
     def __init__(self):
         super().__init__()
         
-        # ===== ESTADO DEL MONITOREO =====
-        self.monitored_process: Optional[psutil.Process] = None
+        # Estado
+        self.monitored_pid: Optional[int] = None
+        self.monitored_name: Optional[str] = None
         self.monitoring_mode: Optional[MonitoringMode] = None
+        self.monitoring_start_time: Optional[float] = None
         
-        # ===== PARA MONITOREO DE RED =====
+        # Historial y métricas
         self.network_history = deque(maxlen=self.HISTORY_WINDOW_SIZE)
-        self.baseline_network_usage = 0.0
-        self.baseline_calculated = False
-        self.baseline_sample_count = 0
-        self.consecutive_idle_checks = 0
-        self.last_io_counters = None
+        self.consecutive_idle_seconds = 0.0
+        self.consecutive_exit_checks = 0
+        self._consecutive_dead_ticks = 0
         
-        # ===== TIMERS =====
-        # Timer principal de monitoreo (para red)
+        self._last_proc_io: Dict[int, tuple] = {}  # pid -> (read_bytes, write_bytes, other_bytes)
+        self._last_net_recv: Optional[int] = None
+        self._last_tick_time: Optional[float] = None
+        self._rolling_baseline: float = 0.0
+        
+        # Timers
         self.monitor_timer = QTimer()
+        self.monitor_timer.setInterval(self.CHECK_INTERVAL_MS)
         self.monitor_timer.timeout.connect(self._on_monitor_tick)
         
-        # Timer de health check (para ambos modos)
         self.health_check_timer = QTimer()
+        self.health_check_timer.setInterval(self.CHECK_INTERVAL_MS)
         self.health_check_timer.timeout.connect(self._on_health_check)
-        
-        # ===== CONTROL =====
-        self.retry_count = 0
-        self.monitoring_start_time: Optional[float] = None
     
     # ===== MÉTODOS PÚBLICOS =====
     
-    def start_monitoring_for_exit(self, pid: int):
-        """
-        Inicia la monitorización para detectar cuándo un proceso se cierra.
-        
-        Modo: ON_EXIT
-        - Verifica periódicamente si el proceso sigue existiendo
-        - Health check cada 5 segundos
-        - Timeout de 24 horas
-        
-        Args:
-            pid: ID del proceso a monitorizar
-            
-        Raises:
-            ValueError: Si el proceso no existe
-        """
+    def start_monitoring_for_exit(self, pid: int, process_name: str = ""):
+        """Inicia monitoreo por cierre de aplicación (ON_EXIT)."""
         try:
             self.stop_monitoring()
-            self._log(f"Iniciando monitoreo de cierre para proceso ID: {pid}")
+            self._log(f"Iniciando monitoreo de cierre para proceso: {process_name} (ID: {pid})")
 
-            # Validar que el proceso existe
             if not psutil.pid_exists(pid):
                 raise ValueError(f"El proceso con ID {pid} no existe o ya ha terminado.")
 
-            self.monitored_process = psutil.Process(pid)
+            self.monitored_pid = pid
+            if not process_name:
+                try:
+                    process_name = psutil.Process(pid).name()
+                except Exception:
+                    process_name = f"PID {pid}"
+            self.monitored_name = process_name
             self.monitoring_mode = MonitoringMode.ON_EXIT
             self.monitoring_start_time = time.time()
+            self.consecutive_exit_checks = 0
 
-            # Health check cada 5 segundos
-            self.health_check_timer.start(5000)
-
-            self._log(f"Monitoreo iniciado correctamente para: {self.monitored_process.name()}")
+            self.health_check_timer.start()
+            self._log(f"Monitoreo de cierre activo para: {self.monitored_name}")
 
         except Exception as e:
-            # Sin reintentos: un proceso que ya no existe o no es accesible no se va
-            # a recuperar 1-3s después, y el time.sleep recursivo bloqueaba el hilo de la GUI.
-            self._log_error(f"Error al iniciar monitoreo: {e}")
+            self._log_error(f"Error al iniciar monitoreo de cierre: {e}")
             raise
     
     def start_monitoring_for_network_idle(self, pid: int, process_name: str):
-        """
-        Inicia la monitorización para detectar inactividad de red.
-        
-        Modo: ON_NETWORK_IDLE
-        
-        Algoritmo:
-        1. Calcular baseline dinámico (primeros 30 segundos)
-        2. Medir I/O bytes cada 2 segundos
-        3. Mantener ventana deslizante de 10 mediciones
-        4. Threshold adaptativo: max(baseline * 5%, 1KB/s)
-        5. Requerir 7 de 10 mediciones bajo threshold
-        6. Detectar 15 segundos sostenidos de inactividad
-        
-        Args:
-            pid: ID del proceso a monitorizar
-            process_name: Nombre del proceso (para logging)
-            
-        Raises:
-            ValueError: Si el proceso no existe
-            PermissionError: Si no hay permisos suficientes
-        """
+        """Inicia monitoreo para detectar fin de descarga (ON_NETWORK_IDLE)."""
         try:
             self.stop_monitoring()
-            self._log(f"Iniciando monitoreo de red para proceso: {process_name} (ID: {pid})")
+            self._log(f"Iniciando monitoreo de fin de descarga para: {process_name} (ID: {pid})")
 
             if not psutil.pid_exists(pid):
                 raise ValueError(f"El proceso con ID {pid} no existe.")
 
-            self.monitored_process = psutil.Process(pid)
+            self.monitored_pid = pid
+            self.monitored_name = process_name
             self.monitoring_mode = MonitoringMode.ON_NETWORK_IDLE
             self.monitoring_start_time = time.time()
+            self._last_tick_time = time.time()
+            self._consecutive_dead_ticks = 0
 
-            # Intentar obtener IO counters (requiere permisos)
+            # Inicializar lecturas base de I/O de toda la familia
+            self._last_proc_io.clear()
+            for proc in self._get_process_family():
+                try:
+                    io = proc.io_counters()
+                    self._last_proc_io[proc.pid] = (io.read_bytes, io.write_bytes, getattr(io, 'other_bytes', 0))
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+            # Inicializar red global
             try:
-                self.last_io_counters = self.monitored_process.io_counters()
-                self._log(f"IO counters inicializados: read={self.last_io_counters.read_bytes}, write={self.last_io_counters.write_bytes}")
-            except psutil.AccessDenied:
-                self._log_error("Se requieren permisos de administrador para monitorear la actividad de red.")
-                raise PermissionError("Se requieren permisos de administrador para esta función.")
+                self._last_net_recv = psutil.net_io_counters().bytes_recv
+            except Exception:
+                self._last_net_recv = None
 
-            # Timer de monitoreo cada 2 segundos (intervalo rápido inicial)
-            self.monitor_timer.start(2000)
-
-            # Health check cada 10 segundos
+            self.monitor_timer.start()
             self.health_check_timer.start(10000)
-
-            self._log("Monitoreo de red iniciado correctamente")
+            self._log(f"Monitoreo de fin de descarga iniciado para: {process_name}")
 
         except Exception as e:
-            self._log_error(f"Error al iniciar monitoreo de red: {e}")
+            self._log_error(f"Error al iniciar monitoreo de descarga: {e}")
             raise
     
     def stop_monitoring(self):
-        """
-        Detiene el monitoreo y limpia todo el estado.
-        Safe to call multiple times.
-        """
-        # Resetear estado de red
-        self.consecutive_idle_checks = 0
-        self.baseline_calculated = False
-        self.baseline_sample_count = 0
-        self.baseline_network_usage = 0.0
+        """Detiene todo el monitoreo y resetea el estado."""
+        self.consecutive_idle_seconds = 0.0
+        self.consecutive_exit_checks = 0
+        self._consecutive_dead_ticks = 0
+        self._rolling_baseline = 0.0
         self.network_history.clear()
-        self.retry_count = 0
-        self.last_io_counters = None
+        self._last_proc_io.clear()
+        self._last_net_recv = None
+        self._last_tick_time = None
         
-        # Detener timers
         self.monitor_timer.stop()
         self.health_check_timer.stop()
         
-        # Limpiar referencias
-        self.monitored_process = None
+        self.monitored_pid = None
+        self.monitored_name = None
         self.monitoring_mode = None
         self.monitoring_start_time = None
     
+    # ===== INSPECCIÓN Y AGRUPACIÓN DE PROCESOS =====
+    
+    def _get_process_family(self) -> List[psutil.Process]:
+        """
+        Obtiene la lista de procesos activos que componen la familia de la aplicación:
+        PID objetivo + procesos hijos recursivos + instancias con el mismo ejecutable.
+        """
+        processes = []
+        seen_pids = set()
+        target_name_lower = (self.monitored_name or "").lower()
+
+        # 1. Proceso principal e hijos
+        if self.monitored_pid and psutil.pid_exists(self.monitored_pid):
+            try:
+                main_proc = psutil.Process(self.monitored_pid)
+                if main_proc.is_running() and main_proc.status() != psutil.STATUS_ZOMBIE:
+                    processes.append(main_proc)
+                    seen_pids.add(self.monitored_pid)
+                    try:
+                        for child in main_proc.children(recursive=True):
+                            if child.pid not in seen_pids and child.is_running():
+                                processes.append(child)
+                                seen_pids.add(child.pid)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        # 2. Otros procesos con el mismo nombre ejecutable (Chrome helpers, Steam workers, etc.)
+        if target_name_lower:
+            try:
+                for p in psutil.process_iter(['pid', 'name']):
+                    pid = p.info['pid']
+                    if pid not in seen_pids and p.info['name'] and p.info['name'].lower() == target_name_lower:
+                        try:
+                            proc = psutil.Process(pid)
+                            if proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE:
+                                processes.append(proc)
+                                seen_pids.add(pid)
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+            except Exception:
+                pass
+
+        return processes
+
+    def _has_active_partial_download(self) -> bool:
+        """
+        Comprueba si existen archivos de descarga temporal activos (.crdownload, .part, etc.)
+        modificados en los últimos 45 segundos. Actúa como salvaguarda ante micro-pausas de red.
+        """
+        try:
+            now = time.time()
+            target_name = (self.monitored_name or "").lower()
+
+            # Navegadores y gestores
+            browser_keys = ("chrome", "edge", "firefox", "brave", "opera", "browser", "torrent", "downloader", "idman")
+            if any(k in target_name for k in browser_keys):
+                downloads_dir = Path.home() / "Downloads"
+                if downloads_dir.exists():
+                    exts = ('.crdownload', '.part', '.opdownload', '.!ut', '.qb')
+                    for entry in downloads_dir.iterdir():
+                        try:
+                            if entry.is_file() and entry.name.lower().endswith(exts):
+                                if (now - entry.stat().st_mtime) < 45.0:
+                                    return True
+                        except (OSError, PermissionError):
+                            continue
+
+            # Steam
+            if "steam" in target_name and self.monitored_pid and psutil.pid_exists(self.monitored_pid):
+                try:
+                    steam_proc = psutil.Process(self.monitored_pid)
+                    steam_dir = Path(steam_proc.exe()).parent
+                    downloading_dir = steam_dir / "steamapps" / "downloading"
+                    if downloading_dir.exists():
+                        for item in downloading_dir.rglob("*"):
+                            try:
+                                if item.is_file() and (now - item.stat().st_mtime) < 45.0:
+                                    return True
+                            except (OSError, PermissionError):
+                                continue
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        return False
+
     # ===== CALLBACKS DE TIMERS =====
     
     def _on_monitor_tick(self):
-        """
-        Callback del timer de monitoreo (solo para modo ON_NETWORK_IDLE).
-        Se ejecuta cada 2-5 segundos dependiendo de la actividad.
-        """
+        """Callback periódico de evaluación de fin de descarga."""
         if self.monitoring_mode != MonitoringMode.ON_NETWORK_IDLE:
             return
-        
+
         try:
-            # Verificar si el proceso sigue existiendo
-            if not self.monitored_process or not self.monitored_process.is_running():
-                self._log("Proceso terminado (detectado en monitor tick)")
-                self._trigger_success()
-                return
-            
-            # Obtener IO counters actuales
-            current_io = self.monitored_process.io_counters()
-            
-            if self.last_io_counters is None:
-                self.last_io_counters = current_io
-                return
-            
-            # Calcular bytes transferidos desde la última medición
-            # Sumamos read_bytes + write_bytes para tener I/O total
-            bytes_delta = (
-                (current_io.read_bytes - self.last_io_counters.read_bytes) +
-                (current_io.write_bytes - self.last_io_counters.write_bytes)
-            )
-            
-            # Convertir a bytes/segundo
-            # El timer puede variar entre 2s y 5s, usar el intervalo actual
-            interval_seconds = self.monitor_timer.interval() / 1000.0
-            network_usage = bytes_delta / interval_seconds
-            
-            self.last_io_counters = current_io
-            
-            # ===== FASE 1: CALCULAR BASELINE DINÁMICO =====
-            if not self.baseline_calculated:
-                self.baseline_sample_count += 1
-                self.baseline_network_usage += network_usage
-                
-                if self.baseline_sample_count >= self.BASELINE_SAMPLES_NEEDED:
-                    self.baseline_network_usage /= self.BASELINE_SAMPLES_NEEDED
-                    self.baseline_calculated = True
-                    self._log(f"📊 Baseline calculado: {self.baseline_network_usage:.2f} bytes/sec")
-                # No logueamos cada muestra del baseline (eran 15 logs en 30s);
-                # solo el hito final de arriba.
-                return  # No evaluar inactividad durante el período de baseline
-            
-            # ===== FASE 2: VENTANA DESLIZANTE =====
-            self.network_history.append(network_usage)
-            
-            # ===== FASE 3: THRESHOLD ADAPTATIVO =====
-            # Usar 5% del baseline o mínimo 1KB/s (lo que sea mayor)
-            adaptive_threshold = max(
-                self.baseline_network_usage * 0.05,
-                self.NETWORK_USAGE_THRESHOLD_BYTES
-            )
-            
-            # ===== FASE 4: CONTAR MEDICIONES INACTIVAS =====
-            idle_count = sum(1 for usage in self.network_history if usage < adaptive_threshold)
-            
-            # ===== FASE 5: EVALUAR INACTIVIDAD SOSTENIDA =====
-            if idle_count >= self.REQUIRED_IDLE_CHECKS:
-                # Mayoría de mediciones están inactivas
-                self.consecutive_idle_checks += 1
-                current_idle_seconds = self.consecutive_idle_checks * interval_seconds
-                
-                self._log(f"⏸️  Inactividad detectada: {idle_count}/{len(self.network_history)} mediciones bajo threshold ({adaptive_threshold:.0f} bytes/s) - Tiempo inactivo: {current_idle_seconds:.0f}s")
-                
-                if current_idle_seconds >= self.IDLE_THRESHOLD_SECONDS:
-                    # ¡INACTIVIDAD CONFIRMADA!
-                    avg_usage = sum(self.network_history) / len(self.network_history)
-                    self._log(f"✅ INACTIVIDAD SOSTENIDA ({current_idle_seconds:.0f}s). Promedio: {avg_usage:.2f} bytes/sec")
+            family = self._get_process_family()
+            if not family:
+                self._consecutive_dead_ticks += 1
+                if self._consecutive_dead_ticks >= 2:
+                    self._log("Todos los procesos de la aplicación monitoreada han terminado.")
                     self._trigger_success()
-                else:
-                    # Aumentar intervalo de monitoreo para ahorrar recursos
-                    if self.monitor_timer.interval() < 5000:
-                        self.monitor_timer.setInterval(5000)
-                        self._log("⏱️  Intervalo aumentado a 5s (modo ahorro)")
+                return
             else:
-                # Hay actividad significativa
-                if self.consecutive_idle_checks > 0:
-                    self._log(f"🔴 Actividad detectada: {network_usage:.2f} bytes/sec (threshold: {adaptive_threshold:.0f}). Reseteando contador.")
-                self.consecutive_idle_checks = 0
-                
-                # Volver a intervalo rápido
-                if self.monitor_timer.interval() > 2000:
-                    self.monitor_timer.setInterval(2000)
-                    self._log("⏱️  Intervalo reducido a 2s (modo activo)")
-        
-        except psutil.NoSuchProcess:
-            self._log("Proceso terminado (NoSuchProcess exception)")
-            self._trigger_success()
+                self._consecutive_dead_ticks = 0
+
+            # 1. Delta de I/O de la familia de procesos
+            current_proc_io = {}
+            delta_write_other = 0
+            delta_disk_io = 0
+
+            for proc in family:
+                try:
+                    io = proc.io_counters()
+                    read_b = io.read_bytes
+                    write_b = io.write_bytes
+                    other_b = getattr(io, 'other_bytes', 0)
+                    current_proc_io[proc.pid] = (read_b, write_b, other_b)
+
+                    if proc.pid in self._last_proc_io:
+                        last_r, last_w, last_o = self._last_proc_io[proc.pid]
+                        dw = max(0, write_b - last_w)
+                        do = max(0, other_b - last_o)
+                        dr = max(0, read_b - last_r)
+                        delta_write_other += (dw + do)
+                        delta_disk_io += (dw + dr)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+            self._last_proc_io = current_proc_io
+
+            # 2. Delta de red global
+            delta_net = 0
+            try:
+                now_net_recv = psutil.net_io_counters().bytes_recv
+                if self._last_net_recv is not None:
+                    delta_net = max(0, now_net_recv - self._last_net_recv)
+                self._last_net_recv = now_net_recv
+            except Exception:
+                pass
+
+            # 3. Intervalo temporal exacto
+            now_time = time.time()
+            interval_sec = max(0.5, now_time - (self._last_tick_time or (now_time - 2.0)))
+            self._last_tick_time = now_time
+
+            rate_write_other = delta_write_other / interval_sec
+            rate_disk_io = delta_disk_io / interval_sec
+            rate_net = delta_net / interval_sec
+
+            # 4. Actividad efectiva combinada
+            # Si el proceso escribe en disco a gran velocidad (descomprimiendo en Steam/Epic), cuenta como actividad
+            if rate_disk_io > self.DISK_ACTIVE_THRESHOLD_BYTES:
+                effective_rate = max(rate_write_other, rate_disk_io)
+            else:
+                # Fusión entre transferencia de la familia y recepción de red
+                if rate_write_other > 512:
+                    effective_rate = max(rate_write_other, min(rate_net, rate_write_other * 2))
+                else:
+                    effective_rate = min(rate_net, rate_disk_io)
+
+            self.network_history.append(effective_rate)
+
+            # 5. Actualizar baseline dinámico suavemente
+            if effective_rate > self.IDLE_FLOOR_BYTES_PER_SEC:
+                if self._rolling_baseline == 0:
+                    self._rolling_baseline = effective_rate
+                else:
+                    self._rolling_baseline = (0.85 * self._rolling_baseline) + (0.15 * effective_rate)
+
+            # 6. Umbral inteligente acotado
+            adaptive_threshold = max(
+                self.IDLE_FLOOR_BYTES_PER_SEC,
+                min(self._rolling_baseline * 0.10, self.ACTIVE_CEILING_BYTES_PER_SEC)
+            )
+
+            # Candado de archivos temporales
+            has_partial = self._has_active_partial_download()
+
+            # 7. Evaluar inactividad
+            is_sample_idle = (effective_rate < adaptive_threshold) and not has_partial
+
+            if is_sample_idle:
+                self.consecutive_idle_seconds += interval_sec
+            else:
+                # Si hubo actividad real, reiniciar contador
+                if self.consecutive_idle_seconds > 0:
+                    self._log(f"🔴 Actividad detectada: {_format_speed(effective_rate)} (umbral: {_format_speed(adaptive_threshold)}). Reiniciando verificación.")
+                self.consecutive_idle_seconds = 0.0
+
+            # 8. Notificar estado a la UI
+            app_name = self.monitored_name or "App"
+            if self.consecutive_idle_seconds > 0:
+                elapsed_int = int(min(self.consecutive_idle_seconds, self.IDLE_CONFIRMATION_SECONDS))
+                status_text = LocalizationManager.get("status_monitoring_verifying").format(
+                    app_name, elapsed_int, self.IDLE_CONFIRMATION_SECONDS
+                )
+                mini_text = f"{elapsed_int}s/{self.IDLE_CONFIRMATION_SECONDS}s"
+            else:
+                speed_str = _format_speed(effective_rate)
+                status_text = LocalizationManager.get("status_monitoring_active").format(
+                    app_name, speed_str
+                )
+                mini_text = speed_str
+
+            self.monitoring_status.emit(status_text, mini_text)
+
+            # 9. Disparo tras confirmación sostenida
+            if self.consecutive_idle_seconds >= self.IDLE_CONFIRMATION_SECONDS:
+                self._log(f"✅ Descarga y escritura completadas ({self.consecutive_idle_seconds:.0f}s de inactividad sostenida).")
+                self._trigger_success()
+
         except Exception as e:
-            self._log_error(f"Error en monitoreo de red: {e}")
-            # Si hay error crítico, considerar completado
-            self._trigger_success()
-    
+            # Nunca disparar éxito ante errores transitorios
+            self._log_error(f"Error en tick de monitoreo: {e}")
+
     def _on_health_check(self):
-        """
-        Callback del timer de health check.
-        Verifica timeout y existencia del proceso.
-        """
+        """Verifica timeout de 24h y estado para ON_EXIT."""
         try:
-            # ===== VERIFICAR TIMEOUT =====
+            # 1. Timeout de seguridad
             if self.monitoring_start_time:
                 elapsed_hours = (time.time() - self.monitoring_start_time) / 3600
                 if elapsed_hours > self.MAX_MONITORING_DURATION_HOURS:
-                    self._log(f"⏰ Timeout alcanzado ({self.MAX_MONITORING_DURATION_HOURS}h). Cancelando monitoreo.")
+                    self._log(f"⏰ Timeout alcanzado ({self.MAX_MONITORING_DURATION_HOURS}h). Deteniendo.")
                     self.stop_monitoring()
                     return
-            
-            # ===== VERIFICAR EXISTENCIA DEL PROCESO =====
-            if self.monitored_process and not self.monitored_process.is_running():
-                self._log("✅ Proceso terminado (detectado por health check)")
-                self._trigger_success()
-        
+
+            # 2. Modo ON_EXIT
+            if self.monitoring_mode == MonitoringMode.ON_EXIT:
+                family = self._get_process_family()
+                is_alive = False
+                for p in family:
+                    try:
+                        if p.is_running() and p.status() != psutil.STATUS_ZOMBIE:
+                            is_alive = True
+                            break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+
+                if not is_alive:
+                    self.consecutive_exit_checks += 1
+                    self._log(f"Comprobación de cierre: proceso no detectado ({self.consecutive_exit_checks}/2)")
+                    if self.consecutive_exit_checks >= 2:
+                        self._log(f"✅ Proceso '{self.monitored_name}' cerrado.")
+                        self._trigger_success()
+                else:
+                    self.consecutive_exit_checks = 0
+                    app_name = self.monitored_name or "App"
+                    status_text = LocalizationManager.get("status_monitoring").format(app_name)
+                    self.monitoring_status.emit(status_text, "RUN")
+
         except Exception as e:
             self._log_error(f"Error en health check: {e}")
-    
+
     # ===== MÉTODOS PRIVADOS =====
     
     def _trigger_success(self):
-        """Dispara el evento de éxito y detiene el monitoreo"""
+        """Dispara el evento de éxito y detiene el monitoreo."""
         self.stop_monitoring()
         self.monitoring_success.emit()
     
     def _log(self, message: str):
-        """Registra un mensaje de log con timestamp"""
+        """Registra un mensaje de log con timestamp."""
         timestamp = time.strftime('%H:%M:%S')
         log_message = f"[{timestamp}] {message}"
         self.monitoring_log.emit(log_message)
-        print(log_message)  # También a consola para debugging
+        print(log_message)
     
     def _log_error(self, message: str):
-        """Registra un mensaje de error con timestamp"""
+        """Registra un mensaje de error con timestamp."""
         timestamp = time.strftime('%H:%M:%S')
         error_message = f"[ERROR {timestamp}] {message}"
         self.monitoring_error.emit(error_message)
@@ -343,28 +451,13 @@ class ProcessMonitorService(QObject):
 
 # ===== FUNCIONES AUXILIARES =====
 
-# Caché con TTL para la enumeración de ventanas: enumerar puede tardar 1-5s con
-# muchas ventanas abiertas y se llama varias veces seguidas (refresh, cambio de
-# modo, arranque). Reutilizamos el resultado dentro de una ventana corta.
 _PROCESS_LIST_TTL_SECONDS = 2.0
 _process_list_cache = None
 _process_list_cache_time = 0.0
 
 
 def get_processes_with_windows(force_refresh: bool = False):
-    """
-    Obtiene una lista de procesos que tienen ventanas visibles (con caché TTL).
-
-    Args:
-        force_refresh: si True, ignora la caché y vuelve a enumerar.
-
-    Returns:
-        List[dict]: Lista de diccionarios con:
-            - pid: ID del proceso
-            - name: Nombre del proceso
-            - window_title: Título de la ventana
-            - display_name: Nombre para mostrar en UI
-    """
+    """Obtiene una lista de procesos que tienen ventanas visibles (con caché TTL)."""
     global _process_list_cache, _process_list_cache_time
 
     now = time.time()
@@ -379,7 +472,7 @@ def get_processes_with_windows(force_refresh: bool = False):
 
 
 def _enumerate_processes_with_windows():
-    """Enumera realmente las ventanas visibles del sistema de forma optimizada."""
+    """Enumera las ventanas visibles del sistema de forma optimizada."""
     import win32gui
     import win32process
 
@@ -387,13 +480,11 @@ def _enumerate_processes_with_windows():
     seen_pids = {0, 4}  # Omitir System Idle y System
     
     def enum_windows_callback(hwnd, _):
-        """Callback para enumerar ventanas con filtrado temprano"""
         if win32gui.IsWindowVisible(hwnd):
             window_text = win32gui.GetWindowText(hwnd).strip()
             if not window_text:
                 return
 
-            # Omitir ventanas de tamaño cero / invisibles en pantalla
             try:
                 rect = win32gui.GetWindowRect(hwnd)
                 if (rect[2] - rect[0] <= 0) or (rect[3] - rect[1] <= 0):
@@ -414,10 +505,7 @@ def _enumerate_processes_with_windows():
                     })
                     seen_pids.add(pid)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass  # Ignorar procesos inaccesibles o terminados
+                    pass
     
-    # Enumerar todas las ventanas
     win32gui.EnumWindows(enum_windows_callback, None)
-    
-    # Ordenar por display_name
     return sorted(processes, key=lambda x: x['display_name'].lower())

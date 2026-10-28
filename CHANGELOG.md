@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.3.0] - 2026-10-28
+
+Actualización de alta fidelidad para el monitor de actividad y optimización del espacio de interfaz de usuario. Perfecciona la detección del fin de descargas mediante fusión de sensores sin requerir entradas adicionales del usuario, reduce un 15% las dimensiones de las ventanas en pantalla y erradica de raíz el error de `LoadLibrary` en ejecutables congelados.
+
+### 🌐 Monitor de Actividad de Alta Fidelidad ("Al terminar descarga")
+- **Renombramiento de condición**: la condición "Al finalizar red" pasa a denominarse **"Al terminar descarga"** (*When download finishes* / *Ao terminar download* / *À la fin du téléchargement*) para reflejar con total claridad su propósito al usuario.
+- **Fusión de sensores de 3 vías**: detección ultra-fiable combinando el I/O acumulado de la familia del proceso seleccionado, el tráfico de red de interfaces del sistema y la presencia de bloqueos o archivos temporales de descarga parcial (`.crdownload`, `.part`, `.opdownload`, `.tmp` y carpetas de descarga de Steam/Epic).
+- **Agrupación de familias de procesos (`_get_process_family`)**: soporte nativo para arquitecturas multi-proceso (Google Chrome, Microsoft Edge, Mozilla Firefox, Steam, Epic Games Launcher) monitorizando el PID principal, procesos hijos recursivos y subprocesos homónimos para capturar el tráfico real gestionado por subprocesos de red aislados.
+- **Umbral adaptativo acotado**: piso mínimo de inactividad de 35 KB/s para ignorar telemetría y keep-alive de fondo, y techo máximo de 150 KB/s para evitar falsos apagados en pausas momentáneas de líneas de alta velocidad, además de un umbral de disco activo de 250 KB/s para contemplar el tiempo de desempaquetado e instalación en disco posterior a la descarga.
+- **Prevención de suspensión del sistema (`Keep Awake`)**: activación automática de la prevención de suspensión durante el monitoreo de actividad para evitar que el PC entre en reposo mientras se descarga un archivo extenso o se renderiza.
+- **Doble confirmación en cierre de app (`ON_EXIT`)**: comprobación cada 2 segundos con 2 ticks de confirmación tanto a nivel de árbol de procesos como de ventanas activas en el sistema.
+
+### 📐 Interfaz Compacta y Ergonómica (-15% de Huella en Pantalla)
+- **Modo Estándar optimizado**: ancho base reducido de 480px a 408px (~15% más compacto), márgenes laterales y espaciados entre paneles ajustados para un aspecto más limpio y estilizado.
+- **Erradicación del espacio muerto vertical**: corrección del límite rígido de 550px en `_apply_compact_mode(False)`, permitiendo que la ventana principal ajuste su altura dinámicamente al contenido real y eliminando más de 200px de espacio vacío.
+- **Mini Controller estilizado**: dimensiones reducidas a 336x78px (antes 380x95px) con tipografía monospace equilibrada y botones circulares de acción de 36px.
+- **Controles compactos**: selectores de tiempo (spinners) reducidos a 62px de ancho, combo de procesos de 28px de altura y barra de progreso de 18px.
+
+### 🐛 Bug Fixes Críticos
+- **Erradicación de error `LoadLibrary` en PyInstaller (`_MEIPASS`)**: limpieza explícita de `_MEIPASS` y `_MEIPASS2` en el entorno de Python y en el bloque de variables de entorno de Windows (`SetEnvironmentVariableW`) durante la elevación UAC en `main.py`, en el reinicio del gestor de actualizaciones (Hot-Swap) en `update_manager.py` y en `services/watchdog.py`. Esto erradica el fallo fatal donde la nueva instancia intentaba cargar `python312.dll` desde el directorio temporal recién eliminado del proceso padre.
+- **Prevención de corrupción de DLLs**: desactivación de compresión UPX (`upx=False`) en la especificación de PyInstaller para asegurar total integridad de bibliotecas compartidas de 64 bits en Windows 11.
+
+
 ## [6.2.0] - 2026-10-28
 
 Actualización técnica integral de rendimiento, huella de memoria, estabilidad y escalabilidad. Sin adición de nuevas funciones ni alteraciones de la interfaz: el programa es más ligero, arranca más rápido, consume menos recursos y resuelve todos los bugs latentes y restricciones arquitectónicas.
